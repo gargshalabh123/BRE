@@ -89,45 +89,6 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
         </ResponsiveContainer>
       </div>
 
-      <div style={{ marginTop: '30px' }}>
-        <h3 style={{ marginBottom: '15px' }}>Code Composition</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart
-            data={[
-              { name: 'Source Lines', value: metrics.total_sloc },
-              { name: 'Comments', value: metrics.total_comments },
-              { name: 'Blank Lines', value: metrics.total_blank }
-            ]}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="value" fill="#667eea" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {Object.keys(database_operations.by_type).length > 0 && (
-        <div style={{ marginTop: '30px' }}>
-          <h3 style={{ marginBottom: '15px' }}>Database Operations by Type</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={Object.entries(database_operations.by_type).map(([name, value]) => ({
-                name,
-                value
-              }))}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="value" fill="#764ba2" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
       {/* ZIP Explorer Data */}
       {loadingZip && (
         <div style={{ marginTop: '30px', textAlign: 'center', padding: '20px' }}>
@@ -138,36 +99,6 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
 
       {zipData && (
         <>
-          <div style={{ marginTop: '40px' }}>
-            <h3 style={{ marginBottom: '15px' }}>Language Distribution</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={zipData.language_distribution.languages_sorted
-                    .filter(lang => lang.language !== 'unknown')
-                    .map(lang => ({
-                      name: lang.language.toUpperCase(),
-                      value: lang.total_loc
-                    }))}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {zipData.language_distribution.languages_sorted
-                    .filter(lang => lang.language !== 'unknown')
-                    .map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
           <div style={{ marginTop: '30px' }}>
             <h3 style={{ marginBottom: '15px' }}>Detailed Breakdown by Extension</h3>
             <div style={{ overflowX: 'auto' }}>

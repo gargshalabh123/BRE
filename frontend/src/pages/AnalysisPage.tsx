@@ -60,7 +60,6 @@ const AnalysisPage: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1>Code Analysis Results</h1>
-            <p>Upload ID: {uploadId}</p>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button className="button button-secondary" onClick={() => navigate('/')}>

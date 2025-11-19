@@ -10,7 +10,9 @@
       "Bash(curl:*)",
       "Bash(python:*)",
       "Bash(dir:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm install:*)",
+      "Bash(timeout 5 python:*)"
     ],
     "deny": [],
     "ask": []

@@ -26,6 +26,18 @@ except ImportError:
     print("Warning: language_router not available. Using basic analysis only.")
     LanguageRouter = None
 
+try:
+    from .complexity_analyzer import ComplexityAnalyzer
+except ImportError:
+    print("Warning: complexity_analyzer not available. Complexity metrics disabled.")
+    ComplexityAnalyzer = None
+
+try:
+    from .dependency_analyzer import DependencyAnalyzer
+except ImportError:
+    print("Warning: dependency_analyzer not available. Basic dependencies only.")
+    DependencyAnalyzer = None
+
 
 class CodeAnalyzer:
     """Main code analysis engine"""
@@ -152,6 +164,7 @@ class CodeAnalyzer:
             'files': files_info,
             'metrics': self._calculate_metrics(),
             'dependencies': self._analyze_dependencies(),
+            'detailed_dependencies': self._analyze_detailed_dependencies(),
             'database_operations': self._extract_database_operations(),
             'business_rules': self._extract_business_rules(),
         }
@@ -228,15 +241,30 @@ class CodeAnalyzer:
                 else:
                     metrics['sloc'] += 1
 
-            # Try to get complexity for Python files
-            if ext == '.py':
+            # Calculate complexity using our ComplexityAnalyzer
+            if ComplexityAnalyzer:
                 try:
-                    cc_results = cc_visit(content)
-                    if cc_results:
-                        metrics['complexity'] = sum(cc.complexity for cc in cc_results)
-                        metrics['functions'] = len(cc_results)
-                except:
-                    pass
+                    language = ComplexityAnalyzer.detect_language(str(rel_path))
+                    complexity = ComplexityAnalyzer.calculate_complexity(content, language)
+                    metrics['complexity'] = complexity
+
+                    # Get complexity rating for additional metadata
+                    rating_info = ComplexityAnalyzer.get_complexity_rating(complexity)
+                    metrics['complexity_rating'] = rating_info['rating']
+                    metrics['complexity_color'] = rating_info['color']
+                except Exception as e:
+                    # Fallback to 0 if complexity calculation fails
+                    metrics['complexity'] = 0
+            else:
+                # Fallback: Try to get complexity for Python files using radon
+                if ext == '.py':
+                    try:
+                        cc_results = cc_visit(content)
+                        if cc_results:
+                            metrics['complexity'] = sum(cc.complexity for cc in cc_results)
+                            metrics['functions'] = len(cc_results)
+                    except:
+                        pass
 
             return metrics
 
@@ -283,7 +311,7 @@ class CodeAnalyzer:
         return None
 
     def _analyze_dependencies(self) -> Dict[str, List[str]]:
-        """Extract dependencies and imports"""
+        """Extract dependencies and imports (simple format for backward compatibility)"""
         dependencies = defaultdict(list)
 
         for file_path in self.files:
@@ -307,6 +335,49 @@ class CodeAnalyzer:
                 pass
 
         return dict(dependencies)
+
+    def _analyze_detailed_dependencies(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Extract detailed dependencies with type, signature, and parameters
+
+        Returns:
+            Dict mapping file paths to lists of detailed dependency objects
+        """
+        detailed_dependencies = {}
+
+        for file_path in self.files:
+            try:
+                rel_path = str(file_path.relative_to(self.base_path))
+
+                if DependencyAnalyzer:
+                    # Use enhanced dependency analyzer
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+
+                    deps = DependencyAnalyzer.analyze_file_dependencies(file_path, content)
+                    if deps:
+                        detailed_dependencies[rel_path] = deps
+                else:
+                    # Fallback: convert simple dependencies to detailed format
+                    specialized = self._get_specialized_analysis(file_path)
+                    if specialized and 'copybooks' in specialized:
+                        copybooks = specialized['copybooks']
+                        detailed_dependencies[rel_path] = [
+                            {
+                                'target': cb['name'],
+                                'type': 'COPYBOOK',
+                                'line': cb.get('line', 0),
+                                'signature': f"COPY {cb['name']}",
+                                'parameters': [],
+                                'description': f"Includes copybook {cb['name']}"
+                            }
+                            for cb in copybooks
+                        ]
+            except Exception as e:
+                print(f"Error analyzing dependencies for {file_path}: {e}")
+                pass
+
+        return detailed_dependencies
 
     def _extract_file_dependencies(self, file_path: Path) -> List[str]:
         """Extract dependencies from a single file"""

@@ -42,6 +42,14 @@ export interface AnalysisResults {
     }>
   }
   dependencies: Record<string, string[]>
+  detailed_dependencies?: Record<string, Array<{
+    target: string
+    type: string
+    line: number
+    signature: string
+    parameters: string[]
+    description: string
+  }>>
   database_operations: {
     queries: Array<{
       file: string
