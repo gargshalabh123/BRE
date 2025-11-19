@@ -1,0 +1,10 @@
+Collecting lizard
+  Downloading lizard-1.19.0-py2.py3-none-any.whl.metadata (16 kB)
+Requirement already satisfied: pygments in c:\code\bre\backend\venv\lib\site-packages (from lizard) (2.19.2)
+Collecting pathspec (from lizard)
+  Downloading pathspec-0.12.1-py3-none-any.whl.metadata (21 kB)
+Downloading lizard-1.19.0-py2.py3-none-any.whl (94 kB)
+Downloading pathspec-0.12.1-py3-none-any.whl (31 kB)
+Installing collected packages: pathspec, lizard
+
+Successfully installed lizard-1.19.0 pathspec-0.12.1

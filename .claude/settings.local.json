@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(del \"c:\\code\\BRE\\backend\\analyzers\\java_analyzer.py\" \"c:\\code\\BRE\\backend\\analyzers\\python_analyzer.py\")",
+      "Bash(test:*)",
+      "Bash(pip install:*)",
+      "Bash(python main.py:*)",
+      "Bash(timeout 5 bash:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(find:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

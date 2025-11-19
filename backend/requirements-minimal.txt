@@ -1,0 +1,22 @@
+# Minimal requirements for Python 3.13 compatibility
+
+# Web Framework (Essential)
+fastapi>=0.115.0
+uvicorn>=0.32.0
+python-multipart>=0.0.12
+
+# Utilities (Essential)
+python-dotenv>=1.0.1
+aiofiles>=24.1.0
+
+# Code Analysis (Optional - install if needed)
+# Uncomment these if you want advanced metrics
+# radon>=6.0.1
+# lizard>=1.17.10
+# pygments>=2.18.0
+# sqlparse>=0.5.1
+
+# AI Integration (Optional - only if using AI features)
+# Uncomment and add your API keys to .env
+# openai>=1.54.0
+# anthropic>=0.39.0
