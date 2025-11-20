@@ -20,15 +20,29 @@ const AnalysisPage: React.FC = () => {
   const [analysisData, setAnalysisData] = useState<AnalysisResults | null>(null)
 
   useEffect(() => {
-    if (!uploadId) return
+    // Check authentication first
+    const isAuth = sessionStorage.getItem('isAuthenticated')
+    if (!isAuth) {
+      console.log('[AnalysisPage] Not authenticated, redirecting to login')
+      navigate('/login')
+      return
+    }
+
+    if (!uploadId) {
+      console.log('[AnalysisPage] No uploadId provided')
+      return
+    }
 
     const loadAnalysis = async () => {
       try {
+        console.log('[AnalysisPage] Loading analysis for uploadId:', uploadId)
         setLoading(true)
         const data = await api.analyzeFullCodebase(uploadId)
+        console.log('[AnalysisPage] Analysis data loaded successfully')
         setAnalysisData(data)
         setError(null)
       } catch (err: any) {
+        console.error('[AnalysisPage] Analysis failed:', err)
         setError(err.response?.data?.detail || 'Failed to analyze codebase')
       } finally {
         setLoading(false)
@@ -36,7 +50,7 @@ const AnalysisPage: React.FC = () => {
     }
 
     loadAnalysis()
-  }, [uploadId])
+  }, [uploadId, navigate])
 
   const handleExport = () => {
     if (!analysisData) return
@@ -62,8 +76,8 @@ const AnalysisPage: React.FC = () => {
             <h1>Code Analysis Results</h1>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="button button-secondary" onClick={() => navigate('/')}>
-              <ArrowLeft size={16} /> New Upload
+            <button className="button button-secondary" onClick={() => navigate('/home')}>
+              <ArrowLeft size={16} /> Back to Home
             </button>
             <button className="button" onClick={handleExport}>
               <Download size={16} /> Export JSON

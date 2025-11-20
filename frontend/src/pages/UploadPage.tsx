@@ -1,13 +1,21 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import { Upload, FileCode, Loader } from 'lucide-react'
+import { Upload, FileCode, Loader, ArrowLeft } from 'lucide-react'
 import api from '../services/api'
 
 const UploadPage: React.FC = () => {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    // Check authentication
+    const isAuth = sessionStorage.getItem('isAuthenticated')
+    if (!isAuth) {
+      navigate('/login')
+    }
+  }, [navigate])
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
@@ -47,7 +55,19 @@ const UploadPage: React.FC = () => {
   return (
     <div className="container">
       <div className="header">
-        <h1>Business Rules Extraction Framework</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+          <div>
+            <h1>Business Rules Extraction Framework</h1>
+          </div>
+          <button
+            className="button button-secondary"
+            onClick={() => navigate('/home')}
+            style={{ fontSize: '14px', padding: '8px 16px' }}
+          >
+            <ArrowLeft size={16} style={{ marginRight: '5px' }} />
+            Back to Home
+          </button>
+        </div>
         <p>Upload your legacy codebase for comprehensive analysis and business rules extraction</p>
       </div>
 

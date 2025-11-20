@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
+import { Download } from 'lucide-react'
 import { AnalysisResults } from '../services/api'
+import { exportToCSV } from '../utils/csvExport'
 
 interface Props {
   data: AnalysisResults
@@ -22,6 +24,23 @@ const BusinessRulesTab: React.FC<Props> = ({ data }) => {
     ruleTypeCounts[rule.type] = (ruleTypeCounts[rule.type] || 0) + 1
   })
 
+  const handleExportBusinessRules = () => {
+    if (filteredRules.length === 0) {
+      alert('No business rules to export')
+      return
+    }
+
+    const csvData = filteredRules.map(rule => ({
+      File: rule.file,
+      Line: rule.line,
+      Type: rule.type,
+      Description: rule.description,
+      'Code Snippet': rule.code_snippet
+    }))
+
+    exportToCSV(csvData, 'business_rules.csv')
+  }
+
   return (
     <div>
       <h2 style={{ marginBottom: '20px' }}>Business Rules</h2>
@@ -42,7 +61,16 @@ const BusinessRulesTab: React.FC<Props> = ({ data }) => {
       <div style={{ marginTop: '30px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <h3>Extracted Rules</h3>
-          <div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {filteredRules.length > 0 && (
+              <button
+                className="button button-primary"
+                onClick={handleExportBusinessRules}
+                style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Download size={16} /> Export CSV
+              </button>
+            )}
             <label style={{ marginRight: '10px' }}>Filter by type:</label>
             <select
               value={filterType}

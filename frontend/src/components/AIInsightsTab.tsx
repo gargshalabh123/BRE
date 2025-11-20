@@ -103,26 +103,16 @@ const AIInsightsTab: React.FC<Props> = ({ uploadId, data }) => {
         <div style={{ background: '#f9f9f9', padding: '15px', borderRadius: '6px' }}>
           <pre style={{ margin: 0, fontSize: '0.9em', lineHeight: '1.6' }}>
             {JSON.stringify({
-              total_files: data.summary.total_files,
-              file_types: data.summary.file_types,
-              total_loc: data.metrics.total_loc,
-              total_sloc: data.metrics.total_sloc,
-              database_operations: data.database_operations.total_count,
-              business_rules: data.business_rules.length,
-              dependencies_count: Object.keys(data.dependencies).length
+              total_files: data.summary?.total_files || data.metrics?.by_file?.length || 0,
+              file_types: data.summary?.file_types || {},
+              total_loc: data.metrics?.total_loc || 0,
+              total_sloc: data.metrics?.total_sloc || 0,
+              database_operations: data.database_operations?.total_count || 0,
+              business_rules: data.business_rules?.length || 0,
+              dependencies_count: Object.keys(data.dependencies || {}).length
             }, null, 2)}
           </pre>
         </div>
-      </div>
-
-      <div style={{ marginTop: '30px', padding: '15px', background: '#fff3cd', borderRadius: '6px', border: '1px solid #ffc107' }}>
-        <h4 style={{ marginBottom: '10px', color: '#856404' }}>Note about AI Features</h4>
-        <p style={{ color: '#856404', lineHeight: '1.6', margin: 0 }}>
-          AI-powered features require API keys to be configured in the backend.
-          Set your OPENAI_API_KEY or ANTHROPIC_API_KEY in the backend .env file.
-          The AI will analyze your codebase statistics and provide insights about architecture,
-          modernization opportunities, and technical debt.
-        </p>
       </div>
     </div>
   )

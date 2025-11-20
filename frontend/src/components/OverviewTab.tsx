@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import { useParams } from 'react-router-dom'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Loader } from 'lucide-react'
 import api, { AnalysisResults, ZipExplorerData } from '../services/api'
+import FileTreeViewer from './FileTreeViewer'
 
 interface Props {
   data: AnalysisResults
@@ -29,11 +31,18 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
     loadZipData()
   }, [uploadId])
 
-  // Prepare file types chart data
-  const fileTypesData = Object.entries(summary.file_types).map(([name, value]) => ({
-    name,
-    value
-  }))
+  // Prepare file types chart data - handle cases where summary might be undefined
+  const fileTypesData = summary?.file_types
+    ? Object.entries(summary.file_types).map(([name, value]) => ({
+        name,
+        value
+      }))
+    : []
+
+  // Navigate to file detail page when file is clicked in tree
+  const handleFileClick = (filePath: string) => {
+    window.location.href = `/analysis/${uploadId}/file/${encodeURIComponent(filePath)}`
+  }
 
   return (
     <div>
@@ -42,27 +51,27 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
       <div className="grid">
         <div className="stat-card">
           <h3>Total Files</h3>
-          <div className="value">{summary.total_files}</div>
+          <div className="value">{summary?.total_files || metrics?.by_file?.length || 0}</div>
         </div>
         <div className="stat-card">
           <h3>Total Size</h3>
-          <div className="value">{summary.total_size_mb} MB</div>
+          <div className="value">{summary?.total_size_mb || 'N/A'} {summary?.total_size_mb ? 'MB' : ''}</div>
         </div>
         <div className="stat-card">
           <h3>Lines of Code</h3>
-          <div className="value">{metrics.total_loc.toLocaleString()}</div>
+          <div className="value">{metrics?.total_loc?.toLocaleString() || 0}</div>
         </div>
         <div className="stat-card">
           <h3>Source Lines</h3>
-          <div className="value">{metrics.total_sloc.toLocaleString()}</div>
+          <div className="value">{metrics?.total_sloc?.toLocaleString() || 0}</div>
         </div>
         <div className="stat-card">
           <h3>DB Operations</h3>
-          <div className="value">{database_operations.total_count}</div>
+          <div className="value">{database_operations?.total_count || 0}</div>
         </div>
         <div className="stat-card">
           <h3>Business Rules</h3>
-          <div className="value">{business_rules.length}</div>
+          <div className="value">{business_rules?.length || 0}</div>
         </div>
       </div>
 
@@ -129,52 +138,19 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
             </div>
           </div>
 
+          {/* File Structure Tree */}
           <div style={{ marginTop: '30px' }}>
-            <h3 style={{ marginBottom: '15px' }}>Top 10 Largest Files by LOC</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>File</th>
-                    <th>Language</th>
-                    <th>Lines of Code</th>
-                    <th>Size (KB)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {zipData.statistics.largest_files.map((file, index) => (
-                    <tr key={index}>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.9em' }}>{file.path}</td>
-                      <td>{zipData.files.find(f => f.path === file.path)?.language || 'Unknown'}</td>
-                      <td>{file.loc.toLocaleString()}</td>
-                      <td>{file.size_kb.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <h3 style={{ marginBottom: '15px' }}>File Structure</h3>
+            <div style={{
+              backgroundColor: 'white',
+              padding: '20px',
+              borderRadius: '8px',
+              border: '1px solid #e0e0e0',
+              maxHeight: '600px',
+              overflow: 'auto'
+            }}>
+              <FileTreeViewer tree={zipData.file_tree} onFileClick={handleFileClick} />
             </div>
-          </div>
-
-          <div style={{ marginTop: '30px' }}>
-            <h3 style={{ marginBottom: '15px' }}>Top 10 Directories by LOC</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart
-                data={Object.entries(zipData.statistics.by_directory)
-                  .sort(([, a], [, b]) => b.loc - a.loc)
-                  .slice(0, 10)
-                  .map(([name, data]) => ({
-                    name: name || 'root',
-                    loc: data.loc,
-                    files: data.count
-                  }))}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="loc" fill="#43e97b" name="Lines of Code" />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
 
           <div className="grid" style={{ marginTop: '30px' }}>

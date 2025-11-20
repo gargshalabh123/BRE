@@ -18,7 +18,7 @@ class DependencyAnalyzer:
 
         Returns list of dependencies with:
         - target: The program/paragraph being called
-        - type: 'CALL', 'PERFORM', 'COPYBOOK'
+        - type: 'CALL', 'PERFORM', 'COPYBOOK', 'XCTL', 'LINK', 'CICS_RETURN', 'BMS_MAP', 'IMS_PSB'
         - line: Line number
         - signature: Full call statement
         - parameters: List of parameters if available
@@ -26,7 +26,23 @@ class DependencyAnalyzer:
         dependencies = []
 
         for i, line in enumerate(lines, 1):
-            clean_line = line[6:72].strip() if len(line) >= 7 else line.strip()
+            # Skip empty lines
+            if not line.strip():
+                continue
+
+            # COBOL comment detection - comments have * or / in column 7 (index 6)
+            # Also check for inline comments starting with *
+            if len(line) >= 7:
+                # Fixed-format COBOL: column 7 (index 6) contains comment indicator
+                indicator_col = line[6] if len(line) > 6 else ''
+                if indicator_col in ['*', '/', '$']:
+                    continue  # Skip comment lines
+                clean_line = line[6:72].strip()
+            else:
+                # Short line or free-format, check if starts with comment
+                if line.strip().startswith('*'):
+                    continue
+                clean_line = line.strip()
 
             # CALL statement (external program invocation)
             call_match = re.search(
@@ -52,6 +68,311 @@ class DependencyAnalyzer:
                     'parameters': parameters,
                     'description': f'Calls external program {program_name}'
                 })
+
+            # EXEC CICS XCTL (transfer control to another program)
+            xctl_match = re.search(
+                r'EXEC\s+CICS\s+XCTL\s+PROGRAM\([\'"]?([A-Z0-9\-]+)[\'"]?\)',
+                clean_line,
+                re.IGNORECASE
+            )
+            if xctl_match:
+                program_name = xctl_match.group(1)
+                dependencies.append({
+                    'target': program_name,
+                    'type': 'CICS_XCTL',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [],
+                    'description': f'CICS XCTL to program {program_name}'
+                })
+
+            # EXEC CICS LINK (link to another program) - Track as CICS_OP
+            link_match = re.search(
+                r'EXEC\s+CICS\s+LINK\s+PROGRAM\([\'"]?([A-Z0-9\-]+)[\'"]?\)',
+                clean_line,
+                re.IGNORECASE
+            )
+            if link_match:
+                program_name = link_match.group(1)
+                # Extract COMMAREA if present
+                commarea_match = re.search(r'COMMAREA\(([A-Z0-9\-]+)\)', clean_line, re.IGNORECASE)
+                commarea = commarea_match.group(1) if commarea_match else ''
+
+                params = ['LINK', program_name]
+                if commarea:
+                    params.append(f'COMMAREA:{commarea}')
+
+                dependencies.append({
+                    'target': program_name,
+                    'type': 'CICS_OP',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': params,
+                    'description': f'CICS LINK to program {program_name}'
+                })
+
+            # EXEC CICS RETURN (with or without TRANSID)
+            return_transid_match = re.search(
+                r'EXEC\s+CICS\s+RETURN\s+TRANSID\([\'"]?([A-Z0-9]+)[\'"]?\)',
+                clean_line,
+                re.IGNORECASE
+            )
+            if return_transid_match:
+                transid = return_transid_match.group(1)
+                dependencies.append({
+                    'target': transid,
+                    'type': 'CICS_RETURN_TRANSID',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [transid],
+                    'description': f'Returns to CICS transaction {transid}'
+                })
+            elif re.search(r'EXEC\s+CICS\s+RETURN(?!\s+TRANSID)', clean_line, re.IGNORECASE):
+                # Plain RETURN without TRANSID
+                dependencies.append({
+                    'target': 'RETURN',
+                    'type': 'CICS_RETURN',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [],
+                    'description': f'Returns control to CICS'
+                })
+
+            # EXEC CICS START TRANSID (start a new transaction)
+            start_transid_match = re.search(
+                r'EXEC\s+CICS\s+START\s+TRANSID\([\'"]?([A-Z0-9]+)[\'"]?\)',
+                clean_line,
+                re.IGNORECASE
+            )
+            if start_transid_match:
+                transid = start_transid_match.group(1)
+                dependencies.append({
+                    'target': transid,
+                    'type': 'CICS_START_TRANSID',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [],
+                    'description': f'Starts CICS transaction {transid}'
+                })
+
+            # EXEC CICS SYNCPOINT - Track as CICS_OP
+            syncpoint_match = re.search(
+                r'EXEC\s+CICS\s+SYNCPOINT(?:\s+ROLLBACK)?',
+                clean_line,
+                re.IGNORECASE
+            )
+            if syncpoint_match:
+                is_rollback = 'ROLLBACK' in clean_line.upper()
+                op_type = 'SYNCPOINT ROLLBACK' if is_rollback else 'SYNCPOINT'
+
+                dependencies.append({
+                    'target': op_type,
+                    'type': 'CICS_OP',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [op_type],
+                    'description': f'CICS {op_type} operation'
+                })
+
+            # BMS Map usage - EXEC CICS SEND MAP / RECEIVE MAP
+            send_map_match = re.search(
+                r'EXEC\s+CICS\s+SEND\s+MAP\([\'"]?([A-Z0-9]+)[\'"]?\)\s+MAPSET\([\'"]?([A-Z0-9]+)[\'"]?\)',
+                clean_line,
+                re.IGNORECASE
+            )
+            if send_map_match:
+                map_name = send_map_match.group(1)
+                mapset_name = send_map_match.group(2)
+                dependencies.append({
+                    'target': f"{mapset_name}/{map_name}",
+                    'type': 'BMS_SEND_MAP',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [mapset_name, map_name],
+                    'description': f'Sends BMS map {map_name} from mapset {mapset_name}'
+                })
+
+            receive_map_match = re.search(
+                r'EXEC\s+CICS\s+RECEIVE\s+MAP\([\'"]?([A-Z0-9]+)[\'"]?\)\s+MAPSET\([\'"]?([A-Z0-9]+)[\'"]?\)',
+                clean_line,
+                re.IGNORECASE
+            )
+            if receive_map_match:
+                map_name = receive_map_match.group(1)
+                mapset_name = receive_map_match.group(2)
+                dependencies.append({
+                    'target': f"{mapset_name}/{map_name}",
+                    'type': 'BMS_RECEIVE_MAP',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [mapset_name, map_name],
+                    'description': f'Receives BMS map {map_name} from mapset {mapset_name}'
+                })
+
+            # CICS SEND (non-BMS) - data/text transmission
+            if 'EXEC' in clean_line.upper() and 'CICS' in clean_line.upper() and 'SEND' in clean_line.upper():
+                # Check if it's NOT a BMS SEND MAP (already handled above)
+                if not re.search(r'SEND\s+MAP\(', clean_line, re.IGNORECASE):
+                    # EXEC CICS SEND FROM(...) or SEND TEXT(...)
+                    send_from_match = re.search(r'FROM\(([A-Z0-9\-]+)\)', clean_line, re.IGNORECASE)
+                    send_text_match = re.search(r'TEXT\(([A-Z0-9\-]+)\)', clean_line, re.IGNORECASE)
+
+                    target = None
+                    params = []
+                    if send_from_match:
+                        target = send_from_match.group(1)
+                        params.append(f'FROM:{target}')
+                    if send_text_match:
+                        target = send_text_match.group(1)
+                        params.append(f'TEXT:{target}')
+
+                    if target or 'SEND' in clean_line.upper():
+                        dependencies.append({
+                            'target': target or 'SEND',
+                            'type': 'CICS_SEND',
+                            'line': i,
+                            'signature': clean_line[:200],
+                            'parameters': params,
+                            'description': f'CICS SEND data transmission'
+                        })
+
+            # CICS RECEIVE (non-BMS) - data reception
+            if 'EXEC' in clean_line.upper() and 'CICS' in clean_line.upper() and 'RECEIVE' in clean_line.upper():
+                # Check if it's NOT a BMS RECEIVE MAP (already handled above)
+                if not re.search(r'RECEIVE\s+MAP\(', clean_line, re.IGNORECASE):
+                    # EXEC CICS RECEIVE INTO(...)
+                    receive_into_match = re.search(r'INTO\(([A-Z0-9\-]+)\)', clean_line, re.IGNORECASE)
+
+                    target = None
+                    params = []
+                    if receive_into_match:
+                        target = receive_into_match.group(1)
+                        params.append(f'INTO:{target}')
+
+                    if target or 'RECEIVE' in clean_line.upper():
+                        dependencies.append({
+                            'target': target or 'RECEIVE',
+                            'type': 'CICS_RECEIVE',
+                            'line': i,
+                            'signature': clean_line[:200],
+                            'parameters': params,
+                            'description': f'CICS RECEIVE data reception'
+                        })
+
+            # IMS DL/I calls - GU, GN, GHU, GHN, ISRT, DLET, REPL, CHKP
+            ims_call_match = re.search(
+                r'\bCALL\s+[\'"]?CBLTDLI[\'"]?\s+USING\s+([A-Z0-9\-]+)',
+                clean_line,
+                re.IGNORECASE
+            )
+            if ims_call_match:
+                function = ims_call_match.group(1)
+                dependencies.append({
+                    'target': function,
+                    'type': 'IMS_DLI_CALL',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [],
+                    'description': f'IMS DL/I call using function {function}'
+                })
+
+            # 88-Level Conditions - Track all COBOL conditional data definitions
+            condition_88_match = re.match(r'^\s*88\s+([A-Z0-9\-]+)', clean_line, re.IGNORECASE)
+            if condition_88_match:
+                condition_name = condition_88_match.group(1)
+                # Extract VALUE if present
+                value_match = re.search(r'VALUE\s+(.*?)(?:\.|$)', clean_line, re.IGNORECASE)
+                value = value_match.group(1).strip() if value_match else ''
+                dependencies.append({
+                    'target': condition_name,
+                    'type': 'CONDITION_88',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': [value] if value else [],
+                    'description': f'88-level condition {condition_name}'
+                })
+                continue  # Skip further processing for this line
+
+            # Message Usage - Track error text and variable references (DISPLAY, STRING, MOVE ... TO ERROR-MSG, etc.)
+            # Look for DISPLAY statements with error messages
+            display_match = re.search(r'DISPLAY\s+([\'"].+?[\'"]|[A-Z0-9\-]+)', clean_line, re.IGNORECASE)
+            if display_match and ('ERROR' in clean_line.upper() or 'FAIL' in clean_line.upper() or 'INVALID' in clean_line.upper()):
+                message_text = display_match.group(1)
+                # Extract variable names used in the message
+                var_matches = re.findall(r'\b([A-Z][A-Z0-9\-]{2,})\b', clean_line, re.IGNORECASE)
+                variables = [v for v in var_matches if v.upper() not in ['DISPLAY', 'ERROR', 'MESSAGE', 'UPON']]
+                dependencies.append({
+                    'target': message_text[:50],  # First 50 chars of message
+                    'type': 'MESSAGE_USAGE',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': variables,
+                    'description': f'Error/diagnostic message'
+                })
+
+            # IMS DL/I Operations - EXEC DLI commands (GU, GNP, REPL, SCHD, TERM)
+            ims_dli_op_match = re.search(
+                r'EXEC\s+DLI\s+(GU|GNP|GN|GHU|GHN|REPL|ISRT|DLET|SCHD|TERM)',
+                clean_line,
+                re.IGNORECASE
+            )
+            if ims_dli_op_match:
+                op_type = ims_dli_op_match.group(1).upper()
+
+                # Extract PCB, segment, layout, WHERE clause, PSB (for SCHD/TERM)
+                pcb_match = re.search(r'PCB\(([A-Z0-9\-]+)\)', clean_line, re.IGNORECASE)
+                segment_match = re.search(r'SEGMENT\(([A-Z0-9\-]+)\)', clean_line, re.IGNORECASE)
+                layout_match = re.search(r'INTO\(([A-Z0-9\-]+)\)|FROM\(([A-Z0-9\-]+)\)', clean_line, re.IGNORECASE)
+                where_match = re.search(r'WHERE\([\'"]?([A-Z0-9\-]+)[\'"]?\)', clean_line, re.IGNORECASE)
+                psb_match = re.search(r'PSB\(([A-Z0-9\-]+)\)', clean_line, re.IGNORECASE)
+
+                pcb = pcb_match.group(1) if pcb_match else ''
+                segment = segment_match.group(1) if segment_match else ''
+                layout = layout_match.group(1) or layout_match.group(2) if layout_match else ''
+                where = where_match.group(1) if where_match else ''
+                psb = psb_match.group(1) if psb_match else ''
+
+                # Build parameter list
+                params = [op_type]
+                if pcb:
+                    params.append(f'PCB:{pcb}')
+                if segment:
+                    params.append(f'SEG:{segment}')
+                if layout:
+                    params.append(f'LAYOUT:{layout}')
+                if where:
+                    params.append(f'WHERE:{where}')
+                if psb:
+                    params.append(f'PSB:{psb}')
+
+                dependencies.append({
+                    'target': f'{op_type}',
+                    'type': 'IMS_DLI_OP',
+                    'line': i,
+                    'signature': clean_line[:200],
+                    'parameters': params,
+                    'description': f'IMS DL/I {op_type} operation'
+                })
+
+            # IMS PSB (Program Specification Block) - only ENTRY statements
+            # Skip 88-levels and VALUE clauses (now tracked separately as CONDITION_88)
+            if not re.match(r'^\s*88\s', clean_line, re.IGNORECASE) and 'VALUE' not in clean_line.upper():
+                # Only look for actual ENTRY statements for PSB scheduling
+                psb_match = re.search(
+                    r'ENTRY\s+[\'"]([A-Z0-9]+)[\'"]',
+                    clean_line,
+                    re.IGNORECASE
+                )
+                if psb_match:
+                    psb_name = psb_match.group(1)
+                    dependencies.append({
+                        'target': psb_name,
+                        'type': 'IMS_PSB',
+                        'line': i,
+                        'signature': clean_line[:200],
+                        'parameters': [],
+                        'description': f'Uses IMS PSB {psb_name}'
+                    })
 
             # PERFORM statement (paragraph/section invocation)
             perform_match = re.search(

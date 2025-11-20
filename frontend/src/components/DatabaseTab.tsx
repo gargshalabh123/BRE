@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
+import { Download } from 'lucide-react'
 import { AnalysisResults } from '../services/api'
+import { exportToCSV } from '../utils/csvExport'
 
 interface Props {
   data: AnalysisResults
@@ -14,6 +16,23 @@ const DatabaseTab: React.FC<Props> = ({ data }) => {
     : dbOps.queries.filter(q => q.type === filterType)
 
   const queryTypes = ['ALL', ...Object.keys(dbOps.by_type)]
+
+  const handleExportDBOperations = () => {
+    if (filteredQueries.length === 0) {
+      alert('No database operations to export')
+      return
+    }
+
+    const csvData = filteredQueries.map(q => ({
+      File: q.file,
+      Line: q.line,
+      Type: q.type,
+      Category: q.category || '',
+      Query: q.query
+    }))
+
+    exportToCSV(csvData, 'database_operations.csv')
+  }
 
   return (
     <div>
@@ -35,7 +54,16 @@ const DatabaseTab: React.FC<Props> = ({ data }) => {
       <div style={{ marginTop: '30px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <h3>SQL Queries</h3>
-          <div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {filteredQueries.length > 0 && (
+              <button
+                className="button button-primary"
+                onClick={handleExportDBOperations}
+                style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Download size={16} /> Export CSV
+              </button>
+            )}
             <label style={{ marginRight: '10px' }}>Filter by type:</label>
             <select
               value={filterType}

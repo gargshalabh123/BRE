@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Info } from 'lucide-react'
+import { Info, Download } from 'lucide-react'
 import { AnalysisResults } from '../services/api'
+import { exportToCSV } from '../utils/csvExport'
 
 interface Props {
   data: AnalysisResults
@@ -69,6 +70,26 @@ const MetricsTab: React.FC<Props> = ({ data }) => {
     }
   }
 
+  const handleExportMetrics = () => {
+    if (filteredAndSortedFiles.length === 0) {
+      alert('No metrics to export')
+      return
+    }
+
+    const data = filteredAndSortedFiles.map(file => ({
+      File: file.file,
+      Type: getFileType(file.file),
+      LOC: file.loc,
+      SLOC: file.sloc,
+      Comments: file.comments,
+      Blank: file.blank,
+      Complexity: file.complexity || 0,
+      Functions: file.functions || 0
+    }))
+
+    exportToCSV(data, 'code_metrics.csv')
+  }
+
   return (
     <div>
       <h2 style={{ marginBottom: '20px' }}>Code Metrics</h2>
@@ -134,9 +155,20 @@ const MetricsTab: React.FC<Props> = ({ data }) => {
               </label>
             ))}
           </div>
-          <div style={{ marginTop: '10px', fontSize: '0.9em', color: '#666' }}>
-            Showing {filteredAndSortedFiles.length} of {data.metrics.by_file.length} files
-            {selectedTypes.size > 0 && ` (filtered by ${selectedTypes.size} type${selectedTypes.size > 1 ? 's' : ''})`}
+          <div style={{ marginTop: '10px', fontSize: '0.9em', color: '#666', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>
+              Showing {filteredAndSortedFiles.length} of {data.metrics.by_file.length} files
+              {selectedTypes.size > 0 && ` (filtered by ${selectedTypes.size} type${selectedTypes.size > 1 ? 's' : ''})`}
+            </span>
+            {filteredAndSortedFiles.length > 0 && (
+              <button
+                className="button button-primary"
+                onClick={handleExportMetrics}
+                style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Download size={16} /> Export CSV
+              </button>
+            )}
           </div>
         </div>
 

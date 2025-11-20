@@ -1,6 +1,9 @@
 import React, { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { Download } from 'lucide-react'
 import { AnalysisResults } from '../services/api'
+import { getDependencyTypeStyle, getDependencyTypeLabel } from '../utils/dependencyColors'
+import { exportToCSV } from '../utils/csvExport'
 
 interface Props {
   data: AnalysisResults
@@ -21,6 +24,7 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
     : 0
 
   // For detailed dependencies, count total and group by type
+  // Exclude CONDITION_88, IMS_DLI_OP, CICS_OP, and PERFORM_PARAGRAPH
   const detailedStats = hasDetailedDeps ? (() => {
     const typeCounts: Record<string, number> = {}
     const targetCounts: Record<string, number> = {}
@@ -28,6 +32,10 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
 
     Object.values(dependencies).forEach(deps => {
       deps.forEach((dep: any) => {
+        // Skip special types that belong in other sections or internal flow
+        if (['CONDITION_88', 'IMS_DLI_OP', 'CICS_OP', 'PERFORM_PARAGRAPH'].includes(dep.type)) {
+          return
+        }
         total++
         typeCounts[dep.type] = (typeCounts[dep.type] || 0) + 1
         targetCounts[dep.target] = (targetCounts[dep.target] || 0) + 1
@@ -41,7 +49,7 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
     return { typeCounts, targetCounts, total, topTargets }
   })() : null
 
-  // Get all dependency types for filter
+  // Get all dependency types for filter (excluding special types)
   const allTypes = hasDetailedDeps && detailedStats
     ? ['ALL', ...Object.keys(detailedStats.typeCounts).sort()]
     : []
@@ -50,6 +58,66 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
   const filteredDependencies = selectedFile
     ? { [selectedFile]: dependencies[selectedFile] }
     : dependencies
+
+  // Group dependencies by file, type, and target to consolidate duplicate entries
+  // Filter out CONDITION_88, IMS_DLI_OP, CICS_OP, and PERFORM_PARAGRAPH
+  const groupedDependencies = hasDetailedDeps ? (() => {
+    const grouped: Record<string, any[]> = {}
+
+    Object.entries(filteredDependencies).forEach(([file, deps]) => {
+      (deps as any[])
+        .filter(dep => !['CONDITION_88', 'IMS_DLI_OP', 'CICS_OP', 'PERFORM_PARAGRAPH'].includes(dep.type)) // Filter out special types
+        .filter(dep => filterByType === 'ALL' || dep.type === filterByType)
+        .forEach(dep => {
+          // Create a unique key for file + type + target
+          const key = `${file}|||${dep.type}|||${dep.target}`
+
+          if (!grouped[key]) {
+            grouped[key] = []
+          }
+          grouped[key].push(dep)
+        })
+    })
+
+    // Convert grouped dependencies to consolidated format
+    return Object.entries(grouped).map(([key, deps]) => {
+      const [file, type, target] = key.split('|||')
+      const lines = deps.map(d => d.line).sort((a, b) => a - b)
+      const firstDep = deps[0]
+
+      return {
+        file,
+        type,
+        target,
+        lines, // Array of all line numbers
+        count: deps.length, // How many times this dependency appears
+        signature: firstDep.signature,
+        parameters: firstDep.parameters,
+        description: firstDep.description
+      }
+    })
+  })() : []
+
+  const handleExportDependencies = () => {
+    if (groupedDependencies.length === 0) {
+      alert('No dependencies to export')
+      return
+    }
+
+    const data = groupedDependencies.map(dep => ({
+      File: dep.file,
+      Type: getDependencyTypeLabel(dep.type),
+      Target: dep.target,
+      Count: dep.count,
+      Lines: dep.lines.join('; '),
+      Signature: dep.signature,
+      Parameters: dep.parameters?.join('; ') || '',
+      Description: dep.description
+    }))
+
+    const filename = `all_dependencies.csv`
+    exportToCSV(data, filename)
+  }
 
   return (
     <div>
@@ -98,25 +166,12 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
                 style={{
                   padding: '10px 15px',
                   borderRadius: '8px',
-                  backgroundColor:
-                    type === 'PROGRAM_CALL' ? '#e3f2fd' :
-                    type === 'PERFORM_PARAGRAPH' ? '#f3e5f5' :
-                    type === 'COPYBOOK' ? '#e8f5e9' :
-                    type === 'IMPORT' ? '#fff3e0' :
-                    type === 'METHOD_CALL' ? '#fce4ec' :
-                    type === 'FUNCTION_CALL' ? '#e0f2f1' : '#f5f5f5',
-                  color:
-                    type === 'PROGRAM_CALL' ? '#1565c0' :
-                    type === 'PERFORM_PARAGRAPH' ? '#6a1b9a' :
-                    type === 'COPYBOOK' ? '#2e7d32' :
-                    type === 'IMPORT' ? '#e65100' :
-                    type === 'METHOD_CALL' ? '#c2185b' :
-                    type === 'FUNCTION_CALL' ? '#00695c' : '#424242',
+                  ...getDependencyTypeStyle(type),
                   fontWeight: 'bold',
                   fontSize: '0.9em'
                 }}
               >
-                {type.replace(/_/g, ' ')}: {count}
+                {getDependencyTypeLabel(type)}: {count}
               </div>
             ))}
           </div>
@@ -151,6 +206,15 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <h3 style={{ margin: 0 }}>All Dependencies</h3>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {hasDetailedDeps && groupedDependencies.length > 0 && (
+              <button
+                className="button button-primary"
+                onClick={handleExportDependencies}
+                style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Download size={16} /> Export CSV
+              </button>
+            )}
             {hasDetailedDeps && (
               <>
                 <label style={{ fontSize: '0.9em', fontWeight: 'bold' }}>Filter by Type:</label>
@@ -193,91 +257,95 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
                 <th>File</th>
                 <th>Type</th>
                 <th>Target</th>
-                <th>Line</th>
+                <th>Count</th>
+                <th>Lines</th>
                 <th>Signature</th>
                 <th>Parameters</th>
                 <th>Description</th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(filteredDependencies).flatMap(([file, deps]) =>
-                (deps as any[])
-                  .filter(dep => filterByType === 'ALL' || dep.type === filterByType)
-                  .map((dep, idx) => (
-                    <tr key={`${file}-${idx}`}>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
-                        <Link
-                          to={`/analysis/${uploadId}/file/${encodeURIComponent(file)}`}
-                          style={{ color: '#667eea', textDecoration: 'none' }}
-                          onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                          onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
-                        >
-                          {file}
-                        </Link>
-                      </td>
-                      <td>
-                        <span style={{
-                          padding: '3px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.75em',
-                          fontWeight: 'bold',
-                          whiteSpace: 'nowrap',
-                          backgroundColor:
-                            dep.type === 'PROGRAM_CALL' ? '#e3f2fd' :
-                            dep.type === 'PERFORM_PARAGRAPH' ? '#f3e5f5' :
-                            dep.type === 'COPYBOOK' ? '#e8f5e9' :
-                            dep.type === 'IMPORT' ? '#fff3e0' :
-                            dep.type === 'METHOD_CALL' ? '#fce4ec' :
-                            dep.type === 'FUNCTION_CALL' ? '#e0f2f1' : '#f5f5f5',
-                          color:
-                            dep.type === 'PROGRAM_CALL' ? '#1565c0' :
-                            dep.type === 'PERFORM_PARAGRAPH' ? '#6a1b9a' :
-                            dep.type === 'COPYBOOK' ? '#2e7d32' :
-                            dep.type === 'IMPORT' ? '#e65100' :
-                            dep.type === 'METHOD_CALL' ? '#c2185b' :
-                            dep.type === 'FUNCTION_CALL' ? '#00695c' : '#424242'
-                        }}>
-                          {dep.type.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{dep.target}</td>
-                      <td style={{ textAlign: 'center' }}>{dep.line}</td>
-                      <td style={{
-                        fontFamily: 'monospace',
-                        fontSize: '0.8em',
-                        maxWidth: '250px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {dep.signature}
-                      </td>
-                      <td>
-                        {dep.parameters && dep.parameters.length > 0 ? (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                            {dep.parameters.map((param: string, pidx: number) => (
-                              <span
-                                key={pidx}
-                                style={{
-                                  padding: '2px 6px',
-                                  backgroundColor: '#f0f0f0',
-                                  borderRadius: '3px',
-                                  fontSize: '0.75em',
-                                  fontFamily: 'monospace'
-                                }}
-                              >
-                                {param}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span style={{ color: '#999', fontSize: '0.85em' }}>-</span>
-                        )}
-                      </td>
-                      <td style={{ fontSize: '0.85em', color: '#666' }}>{dep.description}</td>
-                    </tr>
-                  ))
-              )}
+              {groupedDependencies.map((dep, idx) => (
+                <tr key={idx}>
+                  <td style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
+                    <Link
+                      to={`/analysis/${uploadId}/file/${encodeURIComponent(dep.file)}`}
+                      style={{ color: '#667eea', textDecoration: 'none' }}
+                      onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                      onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                    >
+                      {dep.file}
+                    </Link>
+                  </td>
+                  <td>
+                    <span style={{
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.75em',
+                      fontWeight: 'bold',
+                      whiteSpace: 'nowrap',
+                      ...getDependencyTypeStyle(dep.type)
+                    }}>
+                      {getDependencyTypeLabel(dep.type)}
+                    </span>
+                  </td>
+                  <td style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{dep.target}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{
+                      padding: '2px 8px',
+                      backgroundColor: dep.count > 1 ? '#fff3cd' : '#e9ecef',
+                      borderRadius: '12px',
+                      fontSize: '0.85em',
+                      fontWeight: 'bold',
+                      color: dep.count > 1 ? '#856404' : '#495057'
+                    }}>
+                      {dep.count}
+                    </span>
+                  </td>
+                  <td style={{ fontFamily: 'monospace', fontSize: '0.8em' }}>
+                    {dep.lines.length <= 5 ? (
+                      // Show all lines if 5 or fewer
+                      dep.lines.join(', ')
+                    ) : (
+                      // Show first 3, ..., last 2 if more than 5
+                      `${dep.lines.slice(0, 3).join(', ')}, ... ${dep.lines.slice(-2).join(', ')}`
+                    )}
+                  </td>
+                  <td style={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.8em',
+                    maxWidth: '250px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {dep.signature}
+                  </td>
+                  <td>
+                    {dep.parameters && dep.parameters.length > 0 ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {dep.parameters.map((param: string, pidx: number) => (
+                          <span
+                            key={pidx}
+                            style={{
+                              padding: '2px 6px',
+                              backgroundColor: '#f0f0f0',
+                              borderRadius: '3px',
+                              fontSize: '0.75em',
+                              fontFamily: 'monospace'
+                            }}
+                          >
+                            {param}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ color: '#999', fontSize: '0.85em' }}>-</span>
+                    )}
+                  </td>
+                  <td style={{ fontSize: '0.85em', color: '#666' }}>{dep.description}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         ) : (
