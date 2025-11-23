@@ -31,7 +31,18 @@ const ExtensionSelectionPage: React.FC = () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await api.exploreZip(uploadId!, false)
+      // Try to get detailed zip data, but don't fail if it's not available
+      let data
+      try {
+        data = await api.exploreZip(uploadId!, false)
+      } catch (exploreError) {
+        console.warn('Could not load detailed zip data, using basic info:', exploreError)
+        // Create minimal data structure with empty statistics
+        data = {
+          statistics: { by_extension: {} },
+          files: []
+        }
+      }
       setZipData(data)
 
       // Pre-select common code extensions

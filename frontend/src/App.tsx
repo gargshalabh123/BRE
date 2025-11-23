@@ -7,12 +7,14 @@ import AnalysisPage from './pages/AnalysisPage'
 import FileDetailPage from './pages/FileDetailPage'
 import SavedAnalysisPage from './pages/SavedAnalysisPage'
 import ProtectedRoute from './components/ProtectedRoute'
+import { AIProviderProvider } from './contexts/AIProviderContext'
 
 function App() {
   return (
-    <Router>
-      <div className="app">
-        <Routes>
+    <AIProviderProvider>
+      <Router>
+        <div className="app">
+          <Routes>
           {/* Public route */}
           <Route path="/login" element={<LoginPage />} />
 
@@ -66,6 +68,7 @@ function App() {
         </Routes>
       </div>
     </Router>
+    </AIProviderProvider>
   )
 }
 

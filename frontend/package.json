@@ -4,6 +4,10 @@
   "description": "Business Rules Extraction Framework - Frontend",
   "private": true,
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.5",
+    "@mui/material": "^7.3.5",
     "@types/react-syntax-highlighter": "^15.5.13",
     "axios": "^1.6.2",
     "lucide-react": "^0.294.0",
@@ -14,7 +18,8 @@
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.20.0",
     "react-syntax-highlighter": "^15.6.6",
-    "recharts": "^2.10.3"
+    "recharts": "^2.10.3",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.42",

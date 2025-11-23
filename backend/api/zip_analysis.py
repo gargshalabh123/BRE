@@ -23,6 +23,9 @@ async def upload_zip(file: UploadFile = File(...)) -> Dict[str, Any]:
 
     Returns upload_id for subsequent analysis requests
     """
+    import time
+    start_time = time.time()
+
     # Validate file is a ZIP
     if not file.filename.endswith('.zip'):
         raise HTTPException(status_code=400, detail="Only ZIP files are supported")
@@ -50,12 +53,46 @@ async def upload_zip(file: UploadFile = File(...)) -> Dict[str, Any]:
 
         print(f"[INFO] Successfully extracted {file.filename} to {extract_dir}")
 
-        return {
+        # Scan for available file extensions
+        extension_counts = {}
+        total_files = 0
+        for root, dirs, files in os.walk(extract_dir):
+            for f in files:
+                total_files += 1
+                ext = os.path.splitext(f)[1].lower()
+                if not ext:
+                    ext = '.none'  # Files without extension
+                extension_counts[ext] = extension_counts.get(ext, 0) + 1
+
+        # Determine recommended extensions (common legacy code extensions)
+        recommended_extensions = []
+        legacy_extensions = {'.cbl', '.cob', '.cobol', '.cpy', '.sql', '.ddl', '.dml',
+                           '.rpg', '.rpgle', '.sqlrpgle', '.rpg4', '.rpgiv',
+                           '.dspf', '.prtf', '.lf', '.pf'}
+        for ext in extension_counts:
+            if ext in legacy_extensions:
+                recommended_extensions.append(ext)
+
+        response_data = {
             'upload_id': upload_id,
             'filename': file.filename,
             'size_bytes': len(content),
-            'status': 'uploaded_and_extracted'
+            'status': 'uploaded_and_extracted',
+            'total_files': total_files,
+            'available_extensions': extension_counts,
+            'recommended_extensions': sorted(recommended_extensions)
         }
+
+        elapsed_time = time.time() - start_time
+        print(f"[DEBUG] ZIP Upload Response:")
+        print(f"  - upload_id: {upload_id}")
+        print(f"  - total_files: {total_files}")
+        print(f"  - available_extensions count: {len(extension_counts)}")
+        print(f"  - available_extensions: {list(extension_counts.keys())[:10]}")  # First 10
+        print(f"  - recommended_extensions: {sorted(recommended_extensions)}")
+        print(f"  - [TIMING] ZIP Upload took: {elapsed_time:.2f} seconds")
+
+        return response_data
     except Exception as e:
         # Cleanup on error
         if upload_path.exists():
@@ -92,6 +129,9 @@ async def explore_uploaded_zip(
         results = explorer.explore(extract=detailed)
         return results
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[ERROR] Exploration failed: {error_details}")
         raise HTTPException(status_code=500, detail=f"Exploration failed: {str(e)}")
 
 

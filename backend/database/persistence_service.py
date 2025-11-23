@@ -15,7 +15,8 @@ class PersistenceService:
     def save_analysis_results(self, upload_id: str, analysis_results: Dict[str, Any],
                               project_name: str = "Default Project",
                               upload_filename: str = None,
-                              user_id: int = None) -> int:
+                              user_id: int = None,
+                              selected_extensions: List[str] = None) -> int:
         """
         Save complete analysis results to database
 
@@ -25,6 +26,7 @@ class PersistenceService:
             project_name: Project name (default: "Default Project")
             upload_filename: Original uploaded filename
             user_id: User who uploaded (optional)
+            selected_extensions: List of file extensions that were analyzed
 
         Returns:
             analysis_run_id: ID of created analysis run
@@ -38,7 +40,8 @@ class PersistenceService:
                 project_id=project_id,
                 upload_id=upload_id,
                 upload_filename=upload_filename,
-                uploaded_by=user_id
+                uploaded_by=user_id,
+                selected_extensions=selected_extensions
             )
 
             # Update status to in_progress
@@ -249,6 +252,8 @@ class PersistenceService:
 
     def _transform_to_api_format(self, db_results: Dict[str, Any]) -> Dict[str, Any]:
         """Transform database results to API format"""
+        import json
+
         analysis_run = db_results['analysis_run']
         files = db_results['files']
         dependencies = db_results['dependencies']
@@ -340,7 +345,15 @@ class PersistenceService:
                 'code_snippet': rule['code_snippet']
             })
 
-        return {
+        # Parse selected_extensions from JSON if it exists
+        selected_extensions = None
+        if analysis_run.get('selected_extensions'):
+            try:
+                selected_extensions = json.loads(analysis_run['selected_extensions'])
+            except (json.JSONDecodeError, TypeError):
+                selected_extensions = None
+
+        result = {
             'metrics': metrics,
             'dependencies': {},  # Keep for backward compatibility
             'detailed_dependencies': deps_by_file,
@@ -352,3 +365,9 @@ class PersistenceService:
             'CACHED_FROM_DB': True,
             'analysis_run_id': analysis_run['id']
         }
+
+        # Add selected_extensions if it exists
+        if selected_extensions:
+            result['selected_extensions'] = selected_extensions
+
+        return result

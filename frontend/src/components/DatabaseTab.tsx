@@ -1,13 +1,16 @@
 import React, { useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { Download } from 'lucide-react'
 import { AnalysisResults } from '../services/api'
 import { exportToCSV } from '../utils/csvExport'
+import AIAnalysisButton from './ai/AIAnalysisButton'
 
 interface Props {
   data: AnalysisResults
 }
 
 const DatabaseTab: React.FC<Props> = ({ data }) => {
+  const { uploadId } = useParams<{ uploadId: string }>()
   const [filterType, setFilterType] = useState<string>('ALL')
   const dbOps = data.database_operations
 
@@ -89,6 +92,7 @@ const DatabaseTab: React.FC<Props> = ({ data }) => {
                 <th>Line</th>
                 <th>Type</th>
                 <th>Query</th>
+                <th style={{ textAlign: 'center' }}>AI Analysis</th>
               </tr>
             </thead>
             <tbody>
@@ -110,6 +114,14 @@ const DatabaseTab: React.FC<Props> = ({ data }) => {
                     <code style={{ fontSize: '0.85em', display: 'block', maxWidth: '500px', overflow: 'auto' }}>
                       {query.query}
                     </code>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <AIAnalysisButton
+                      uploadId={uploadId || ''}
+                      itemType="query"
+                      itemData={query}
+                      variant="button"
+                    />
                   </td>
                 </tr>
               ))}

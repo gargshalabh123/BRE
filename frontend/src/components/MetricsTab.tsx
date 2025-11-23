@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { Info, Download } from 'lucide-react'
 import { AnalysisResults } from '../services/api'
 import { exportToCSV } from '../utils/csvExport'
+import AIAnalysisButton from './ai/AIAnalysisButton'
 
 interface Props {
   data: AnalysisResults
@@ -266,6 +267,7 @@ const MetricsTab: React.FC<Props> = ({ data }) => {
                   )}
                 </th>
                 <th>Functions</th>
+                <th style={{ textAlign: 'center' }}>AI Analysis</th>
               </tr>
             </thead>
             <tbody>
@@ -306,6 +308,14 @@ const MetricsTab: React.FC<Props> = ({ data }) => {
                     ) : '-'}
                   </td>
                   <td>{file.functions || '-'}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <AIAnalysisButton
+                      uploadId={uploadId || ''}
+                      itemType="file"
+                      itemData={file}
+                      variant="button"
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

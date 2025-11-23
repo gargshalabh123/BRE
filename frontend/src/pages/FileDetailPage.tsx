@@ -6,6 +6,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import api, { AnalysisResults } from '../services/api'
 import { getDependencyTypeStyle, getDependencyTypeLabel } from '../utils/dependencyColors'
 import { exportToCSV, copyToClipboard } from '../utils/csvExport'
+import AIAnalysisButton from '../components/ai/AIAnalysisButton'
 
 interface FileContent {
   path: string
@@ -26,9 +27,10 @@ const FileDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [fileContent, setFileContent] = useState<FileContent | null>(null)
   const [analysisData, setAnalysisData] = useState<AnalysisResults | null>(null)
-  const [activeSection, setActiveSection] = useState<'source' | 'metrics' | 'deps' | 'db' | 'rules'>('metrics')
+  const [activeSection, setActiveSection] = useState<'source' | 'metrics'>('metrics')
   const [showComplexityInfo, setShowComplexityInfo] = useState(false)
   const [copySuccess, setCopySuccess] = useState<string | null>(null)
+  const [enhancedStats, setEnhancedStats] = useState<any>(null)
 
   useEffect(() => {
     const loadFileData = async () => {
@@ -68,6 +70,38 @@ const FileDetailPage: React.FC = () => {
 
         setFileContent(content)
         setAnalysisData(analysis)
+
+        // Extract program name from file path (last segment, no extension)
+        const programFileName = filePath.split(/[/\\]/).pop() || ''
+        const programName = programFileName.replace(/\.(cbl|cob|cobol|cpy)$/i, '')
+
+        // Fetch enhanced dependency stats for this program
+        try {
+          const [dbUsage, callers, callees, copybookUsage] = await Promise.all([
+            api.getDatabaseUsage(uploadId, programName).catch(() => ({ total_objects: 0, database_usage: [] })),
+            api.getProgramCallers(uploadId, programName).catch(() => ({ callers: [] })),
+            api.getProgramCallees(uploadId, programName).catch(() => ({ callees: [] })),
+            api.getProgramCopybooks(uploadId, programName).catch(() => ({ copybooks: [] }))
+          ])
+
+          setEnhancedStats({
+            database_usage: dbUsage.database_usage || [],
+            total_db_objects: dbUsage.total_objects || 0,
+            callers: callers.callers || [],
+            callees: callees.callees || [],
+            copybooks: copybookUsage.copybooks || []
+          })
+          console.log('Enhanced stats loaded:', {
+            db: dbUsage.total_objects,
+            callers: callers.callers?.length || 0,
+            callees: callees.callees?.length || 0,
+            copybooks: copybookUsage.copybooks?.length || 0
+          })
+        } catch (err) {
+          console.log('No enhanced stats found for program:', programName)
+          setEnhancedStats(null)
+        }
+
         setError(null)
       } catch (err: any) {
         console.error('Error loading file data:', err)
@@ -481,24 +515,6 @@ const FileDetailPage: React.FC = () => {
           >
             Source Code
           </button>
-          <button
-            className={`tab ${activeSection === 'deps' ? 'active' : ''}`}
-            onClick={() => setActiveSection('deps')}
-          >
-            <GitBranch size={16} /> Dependencies ({groupedFileDependencies.length})
-          </button>
-          <button
-            className={`tab ${activeSection === 'db' ? 'active' : ''}`}
-            onClick={() => setActiveSection('db')}
-          >
-            <Database size={16} /> DB Operations ({fileDbOps.length})
-          </button>
-          <button
-            className={`tab ${activeSection === 'rules' ? 'active' : ''}`}
-            onClick={() => setActiveSection('rules')}
-          >
-            <AlertCircle size={16} /> Business Rules ({fileRules.length})
-          </button>
         </div>
 
         {/* Overview Tab */}
@@ -516,20 +532,28 @@ const FileDetailPage: React.FC = () => {
                     <td style={{ fontWeight: 'bold', padding: '10px' }}>Language:</td>
                     <td style={{ padding: '10px' }}>{getLanguage(filePath).toUpperCase()}</td>
                   </tr>
+                  {enhancedStats && (
+                    <>
+                      <tr>
+                        <td style={{ fontWeight: 'bold', padding: '10px' }}>Called Programs:</td>
+                        <td style={{ padding: '10px' }}>{enhancedStats.callees?.length || 0}</td>
+                      </tr>
+                      <tr>
+                        <td style={{ fontWeight: 'bold', padding: '10px' }}>Called By:</td>
+                        <td style={{ padding: '10px' }}>{enhancedStats.callers?.length || 0}</td>
+                      </tr>
+                      <tr>
+                        <td style={{ fontWeight: 'bold', padding: '10px' }}>DB Objects Used:</td>
+                        <td style={{ padding: '10px' }}>{enhancedStats.database_usage?.length || 0}</td>
+                      </tr>
+                      <tr>
+                        <td style={{ fontWeight: 'bold', padding: '10px' }}>Copybooks Used:</td>
+                        <td style={{ padding: '10px' }}>{enhancedStats.copybooks?.length || 0}</td>
+                      </tr>
+                    </>
+                  )}
                   <tr>
-                    <td style={{ fontWeight: 'bold', padding: '10px' }}>Dependencies:</td>
-                    <td style={{ padding: '10px' }}>{fileDependencies.length} file(s)</td>
-                  </tr>
-                  <tr>
-                    <td style={{ fontWeight: 'bold', padding: '10px' }}>DB Operations:</td>
-                    <td style={{ padding: '10px' }}>{fileDbOps.length} operation(s)</td>
-                  </tr>
-                  <tr>
-                    <td style={{ fontWeight: 'bold', padding: '10px' }}>Business Rules:</td>
-                    <td style={{ padding: '10px' }}>{fileRules.length} rule(s)</td>
-                  </tr>
-                  <tr>
-                    <td style={{ fontWeight: 'bold', padding: '10px' }}>Functions:</td>
+                    <td style={{ fontWeight: 'bold', padding: '10px' }}>Functions/Paragraphs:</td>
                     <td style={{ padding: '10px' }}>{fileMetrics?.functions || '0'}</td>
                   </tr>
                 </tbody>
@@ -549,6 +573,20 @@ const FileDetailPage: React.FC = () => {
                     {copySuccess}
                   </span>
                 )}
+                <AIAnalysisButton
+                  uploadId={uploadId || ''}
+                  itemType="file"
+                  itemData={{
+                    file: filePath,
+                    loc: fileMetrics?.loc || 0,
+                    sloc: fileMetrics?.sloc || 0,
+                    complexity: fileMetrics?.complexity || 0,
+                    comments: fileMetrics?.comments || 0,
+                    blank: fileMetrics?.blank || 0,
+                    functions: fileMetrics?.functions || 0
+                  }}
+                  variant="button"
+                />
                 <button
                   className="button button-primary"
                   onClick={handleCopyCode}
@@ -569,252 +607,6 @@ const FileDetailPage: React.FC = () => {
                 {fileContent.content}
               </SyntaxHighlighter>
             </div>
-          </div>
-        )}
-
-        {/* Dependencies Tab */}
-        {activeSection === 'deps' && (
-          <div style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0 }}>Dependencies ({groupedFileDependencies.length} unique, {fileDependencies.length} total)</h3>
-              {groupedFileDependencies.length > 0 && (
-                <button
-                  className="button button-primary"
-                  onClick={handleExportDependencies}
-                  style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <Download size={16} /> Export CSV
-                </button>
-              )}
-            </div>
-            {groupedFileDependencies.length > 0 ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Target</th>
-                      <th>Count</th>
-                      <th>Lines</th>
-                      <th>Signature</th>
-                      <th>Parameters</th>
-                      <th>Description</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupedFileDependencies.map((dep, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <span style={{
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.85em',
-                            fontWeight: 'bold',
-                            ...getDependencyTypeStyle(dep.type)
-                          }}>
-                            {getDependencyTypeLabel(dep.type)}
-                          </span>
-                        </td>
-                        <td style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{dep.target}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{
-                            padding: '2px 8px',
-                            backgroundColor: dep.count > 1 ? '#fff3cd' : '#e9ecef',
-                            borderRadius: '12px',
-                            fontSize: '0.85em',
-                            fontWeight: 'bold',
-                            color: dep.count > 1 ? '#856404' : '#495057'
-                          }}>
-                            {dep.count}
-                          </span>
-                        </td>
-                        <td style={{ fontFamily: 'monospace', fontSize: '0.8em' }}>
-                          {dep.lines.length <= 5 ? (
-                            // Show all lines if 5 or fewer
-                            dep.lines.join(', ')
-                          ) : (
-                            // Show first 3, ..., last 2 if more than 5
-                            `${dep.lines.slice(0, 3).join(', ')}, ... ${dep.lines.slice(-2).join(', ')}`
-                          )}
-                        </td>
-                        <td style={{
-                          fontFamily: 'monospace',
-                          fontSize: '0.85em',
-                          maxWidth: '300px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {dep.signature}
-                        </td>
-                        <td>
-                          {dep.parameters && dep.parameters.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                              {dep.parameters.map((param, pidx) => (
-                                <span
-                                  key={pidx}
-                                  style={{
-                                    padding: '2px 6px',
-                                    backgroundColor: '#f0f0f0',
-                                    borderRadius: '3px',
-                                    fontSize: '0.8em',
-                                    fontFamily: 'monospace'
-                                  }}
-                                >
-                                  {param}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span style={{ color: '#999' }}>-</span>
-                          )}
-                        </td>
-                        <td style={{ fontSize: '0.9em', color: '#666' }}>{dep.description}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p>No dependencies found</p>
-            )}
-          </div>
-        )}
-
-        {/* DB Operations Tab */}
-        {activeSection === 'db' && (
-          <div style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0 }}>Database Operations ({fileDbOps.length})</h3>
-              {fileDbOps.length > 0 && (
-                <button
-                  className="button button-primary"
-                  onClick={handleExportDBOperations}
-                  style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <Download size={16} /> Export CSV
-                </button>
-              )}
-            </div>
-            {fileDbOps.length > 0 ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Line</th>
-                      <th>Type</th>
-                      <th>Category</th>
-                      <th>Target/Operation</th>
-                      <th>Context</th>
-                      <th>Query/Statement</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fileDbOps.map((op, idx) => (
-                      <tr key={idx}>
-                        <td>{op.line}</td>
-                        <td><span style={{ padding: '2px 6px', backgroundColor: '#667eea', color: '#fff', borderRadius: '3px', fontSize: '0.85em' }}>{op.type}</span></td>
-                        <td>{op.category}</td>
-                        <td style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
-                          {op.target || '-'}
-                        </td>
-                        <td>
-                          {op.parameters && op.parameters.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                              {op.parameters.map((param: string, pidx: number) => (
-                                <span
-                                  key={pidx}
-                                  style={{
-                                    padding: '2px 6px',
-                                    backgroundColor: '#f0f0f0',
-                                    borderRadius: '3px',
-                                    fontSize: '0.75em',
-                                    fontFamily: 'monospace'
-                                  }}
-                                >
-                                  {param}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span style={{ color: '#999', fontSize: '0.85em' }}>-</span>
-                          )}
-                        </td>
-                        <td style={{ fontFamily: 'monospace', fontSize: '0.85em', maxWidth: '500px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{op.query}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p>No database operations found</p>
-            )}
-          </div>
-        )}
-
-        {/* Business Rules Tab */}
-        {activeSection === 'rules' && (
-          <div style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0 }}>Business Rules ({fileRules.length})</h3>
-              {fileRules.length > 0 && (
-                <button
-                  className="button button-primary"
-                  onClick={handleExportBusinessRules}
-                  style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <Download size={16} /> Export CSV
-                </button>
-              )}
-            </div>
-            {fileRules.length > 0 ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Line</th>
-                      <th>Type</th>
-                      <th>Condition Name</th>
-                      <th>Value</th>
-                      <th>Description</th>
-                      <th>Code Snippet</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fileRules.map((rule, idx) => (
-                      <tr key={idx}>
-                        <td>{rule.line}</td>
-                        <td><span style={{ padding: '2px 6px', backgroundColor: '#764ba2', color: '#fff', borderRadius: '3px', fontSize: '0.85em' }}>{rule.type}</span></td>
-                        <td style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
-                          {rule.condition_name || '-'}
-                        </td>
-                        <td>
-                          {rule.value ? (
-                            <span style={{
-                              padding: '2px 6px',
-                              backgroundColor: '#fff8e1',
-                              color: '#f57f00',
-                              borderRadius: '3px',
-                              fontSize: '0.85em',
-                              fontFamily: 'monospace',
-                              fontWeight: 'bold'
-                            }}>
-                              {rule.value}
-                            </span>
-                          ) : (
-                            <span style={{ color: '#999', fontSize: '0.85em' }}>-</span>
-                          )}
-                        </td>
-                        <td>{rule.description}</td>
-                        <td style={{ fontFamily: 'monospace', fontSize: '0.85em', maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rule.code_snippet}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p>No business rules found</p>
-            )}
           </div>
         )}
       </div>

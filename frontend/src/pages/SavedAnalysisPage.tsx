@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Calendar, FileText, BarChart2, Database, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Calendar, FileText, BarChart2, Database, AlertCircle, Trash2 } from 'lucide-react'
+import api from '../services/api'
 
 interface SavedAnalysis {
   upload_id: string
@@ -16,6 +17,8 @@ const SavedAnalysisPage: React.FC = () => {
   const [analyses, setAnalyses] = useState<SavedAnalysis[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false)
 
   useEffect(() => {
     // Check authentication
@@ -64,6 +67,44 @@ const SavedAnalysisPage: React.FC = () => {
 
   const handleViewAnalysis = (uploadId: string) => {
     navigate(`/analysis/${uploadId}`)
+  }
+
+  const handleDelete = async (uploadId: string, event: React.MouseEvent) => {
+    event.stopPropagation() // Prevent navigating to analysis page
+
+    if (!window.confirm('Are you sure you want to delete this analysis? This action cannot be undone.')) {
+      return
+    }
+
+    setDeletingId(uploadId)
+    try {
+      await api.deleteSavedAnalysis(uploadId)
+      // Remove from local state
+      setAnalyses(analyses.filter(a => a.upload_id !== uploadId))
+      setError(null)
+    } catch (err) {
+      console.error('Failed to delete analysis:', err)
+      setError('Failed to delete analysis. Please try again.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    setShowDeleteAllConfirm(false)
+
+    try {
+      setLoading(true)
+      const result = await api.deleteAllSavedAnalyses()
+      console.log(`Deleted ${result.deleted_count} analyses`)
+      setAnalyses([])
+      setError(null)
+    } catch (err) {
+      console.error('Failed to delete all analyses:', err)
+      setError('Failed to delete all analyses. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (loading) {
@@ -115,14 +156,113 @@ const SavedAnalysisPage: React.FC = () => {
             Back to Home
           </button>
 
-          <h1 style={{ margin: 0, fontSize: '28px', color: '#333' }}>
-            Saved Analysis
-          </h1>
-          <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#666' }}>
-            Browse and manage your previously analyzed codebases
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '28px', color: '#333' }}>
+                Saved Analysis
+              </h1>
+              <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#666' }}>
+                Browse and manage your previously analyzed codebases
+              </p>
+            </div>
+
+            {analyses.length > 0 && (
+              <button
+                onClick={() => setShowDeleteAllConfirm(true)}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: '#dc2626',
+                  backgroundColor: '#fee',
+                  border: '1px solid #fcc',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fcc'
+                  e.currentTarget.style.borderColor = '#dc2626'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fee'
+                  e.currentTarget.style.borderColor = '#fcc'
+                }}
+              >
+                <Trash2 size={16} />
+                Delete All
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Delete All Confirmation Modal */}
+      {showDeleteAllConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            padding: '30px',
+            maxWidth: '500px',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+          }}>
+            <h2 style={{ margin: '0 0 15px 0', fontSize: '22px', color: '#333' }}>
+              Delete All Analyses?
+            </h2>
+            <p style={{ margin: '0 0 25px 0', fontSize: '14px', color: '#666', lineHeight: '1.6' }}>
+              This will permanently delete all {analyses.length} saved analysis run(s) from the database.
+              This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowDeleteAllConfirm(false)}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: '#666',
+                  backgroundColor: '#f5f5f5',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAll}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: '#fff',
+                  backgroundColor: '#dc2626',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                Delete All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main style={{
@@ -289,7 +429,40 @@ const SavedAnalysisPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={(e) => handleDelete(analysis.upload_id, e)}
+                      disabled={deletingId === analysis.upload_id}
+                      style={{
+                        padding: '10px 20px',
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        color: '#dc2626',
+                        backgroundColor: '#fee',
+                        border: '1px solid #fcc',
+                        borderRadius: '6px',
+                        cursor: deletingId === analysis.upload_id ? 'not-allowed' : 'pointer',
+                        opacity: deletingId === analysis.upload_id ? 0.6 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (deletingId !== analysis.upload_id) {
+                          e.currentTarget.style.backgroundColor = '#fcc'
+                          e.currentTarget.style.borderColor = '#dc2626'
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (deletingId !== analysis.upload_id) {
+                          e.currentTarget.style.backgroundColor = '#fee'
+                          e.currentTarget.style.borderColor = '#fcc'
+                        }
+                      }}
+                    >
+                      <Trash2 size={14} />
+                      {deletingId === analysis.upload_id ? 'Deleting...' : 'Delete'}
+                    </button>
                     <button
                       style={{
                         padding: '10px 20px',

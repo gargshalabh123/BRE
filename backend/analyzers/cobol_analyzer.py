@@ -6,9 +6,10 @@ import re
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
+from .base_analyzer import BaseFileAnalyzer
 
 
-class COBOLAnalyzer:
+class COBOLAnalyzer(BaseFileAnalyzer):
     """Specialized analyzer for COBOL code"""
 
     def __init__(self):
@@ -25,16 +26,31 @@ class COBOLAnalyzer:
         self.database_calls = []
         self.business_rules = []
 
-    def analyze_file(self, file_path: Path) -> Dict[str, Any]:
+    def can_analyze(self, file_path: Path) -> bool:
+        """Check if this analyzer can handle the file"""
+        return file_path.suffix.lower() in ['.cbl', '.cob', '.cobol']
+
+    def get_file_types(self) -> List[str]:
+        """Get supported file types"""
+        return ['.cbl', '.cob', '.cobol']
+
+    def get_analyzer_name(self) -> str:
+        """Get analyzer name"""
+        return 'COBOL'
+
+    def get_priority(self) -> int:
+        """Get analyzer priority"""
+        return 1
+
+    def analyze_file(self, file_path: Path, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Analyze a COBOL source file"""
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
                 lines = content.split('\n')
 
-            return {
-                'file': str(file_path),
-                'language': 'COBOL',
+            # Extract COBOL-specific data
+            data = {
                 'divisions': self._extract_divisions(lines),
                 'copybooks': self._extract_copybooks(lines),
                 'paragraphs': self._extract_paragraphs(lines),
@@ -46,8 +62,22 @@ class COBOLAnalyzer:
                 'metrics': self._calculate_metrics(lines),
                 'modernization_hints': self._get_modernization_hints(lines)
             }
+
+            # Return standardized result
+            return self.create_result(
+                file_path=file_path,
+                file_type='COBOL Program',
+                language='COBOL',
+                data=data
+            )
         except Exception as e:
-            return {'error': str(e), 'file': str(file_path)}
+            return self.create_result(
+                file_path=file_path,
+                file_type='COBOL Program',
+                language='COBOL',
+                data={},
+                error=str(e)
+            )
 
     def _extract_divisions(self, lines: List[str]) -> Dict[str, int]:
         """Extract COBOL division information"""

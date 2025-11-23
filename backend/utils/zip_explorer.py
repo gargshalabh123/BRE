@@ -199,7 +199,7 @@ class ZipExplorer:
 
     def _detect_language(self, extension: str) -> str:
         """Detect programming language from file extension"""
-        lang_map = self.language_router.LANGUAGE_MAP
+        lang_map = self.language_router.legacy_language_map
         return lang_map.get(extension, 'unknown')
 
     def _is_text_file(self, extension: str, mime_type: Optional[str]) -> bool:

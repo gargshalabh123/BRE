@@ -1,0 +1,76 @@
+# Analyzer Configuration
+# Controls which file analyzers are enabled and their behavior
+
+analyzers:
+  # COBOL Program Analyzer
+  cobol:
+    enabled: true
+    priority: 1
+    extensions:
+      - .cbl
+      - .cob
+      - .cobol
+    description: "Analyzes COBOL program files"
+
+  # BMS (Basic Mapping Support) Analyzer
+  bms:
+    enabled: true
+    priority: 2
+    extensions:
+      - .bms
+    description: "Analyzes BMS mapsets and screen definitions"
+
+  # JCL (Job Control Language) Analyzer
+  jcl:
+    enabled: true
+    priority: 3
+    extensions:
+      - .jcl
+    description: "Analyzes JCL job definitions and batch workflows"
+
+  # Copybook Analyzer
+  copybook:
+    enabled: true
+    priority: 4
+    extensions:
+      - .cpy
+    description: "Analyzes COBOL copybooks and data structures"
+
+  # SQL Analyzer
+  sql:
+    enabled: true
+    priority: 5
+    extensions:
+      - .sql
+      - .ddl
+      - .dml
+    description: "Analyzes SQL scripts and database definitions"
+
+  # AS/400 Analyzer
+  as400:
+    enabled: false
+    priority: 10
+    extensions:
+      - .rpg
+      - .rpgle
+      - .dspf
+      - .prtf
+      - .lf
+      - .pf
+      - .cmd
+      - .clle
+    description: "Analyzes AS/400 and iSeries files"
+
+# Global settings
+settings:
+  # Maximum file size to analyze (in MB)
+  max_file_size_mb: 50
+
+  # Enable detailed logging
+  debug_logging: false
+
+  # Cache analysis results
+  enable_caching: true
+
+  # Number of parallel analyzers to run
+  max_parallel_analyzers: 4

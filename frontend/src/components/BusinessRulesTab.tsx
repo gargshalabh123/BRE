@@ -2,12 +2,15 @@ import React, { useState } from 'react'
 import { Download } from 'lucide-react'
 import { AnalysisResults } from '../services/api'
 import { exportToCSV } from '../utils/csvExport'
+import AIAnalysisButton from './ai/AIAnalysisButton'
+import { useParams } from 'react-router-dom'
 
 interface Props {
   data: AnalysisResults
 }
 
 const BusinessRulesTab: React.FC<Props> = ({ data }) => {
+  const { uploadId } = useParams<{ uploadId: string }>()
   const [filterType, setFilterType] = useState<string>('ALL')
   const rules = data.business_rules
 
@@ -96,6 +99,7 @@ const BusinessRulesTab: React.FC<Props> = ({ data }) => {
                 <th>Line</th>
                 <th>Type</th>
                 <th>Code</th>
+                <th style={{ textAlign: 'center' }}>AI Analysis</th>
               </tr>
             </thead>
             <tbody>
@@ -112,6 +116,14 @@ const BusinessRulesTab: React.FC<Props> = ({ data }) => {
                     <code style={{ fontSize: '0.85em', display: 'block', maxWidth: '600px', overflow: 'auto' }}>
                       {rule.code}
                     </code>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <AIAnalysisButton
+                      uploadId={uploadId || ''}
+                      itemType="rule"
+                      itemData={rule}
+                      variant="button"
+                    />
                   </td>
                 </tr>
               ))}

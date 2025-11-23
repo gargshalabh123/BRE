@@ -115,16 +115,22 @@ class CodeAnalyzer:
         '.ini': 'INI Config',
     }
 
-    def __init__(self, base_path: str):
+    def __init__(self, base_path: str, selected_extensions: Optional[List[str]] = None):
         self.base_path = Path(base_path)
         self.files = []
         self.analysis_results = {}
         self.language_router = LanguageRouter() if LanguageRouter else None
         self.specialized_analysis_cache = {}
+        # File extension filtering - if provided, only analyze files with these extensions
+        self.selected_extensions = set(ext.lower() if ext.startswith('.') else f'.{ext.lower()}'
+                                      for ext in selected_extensions) if selected_extensions else None
+        if self.selected_extensions:
+            print(f"[INFO] CodeAnalyzer initialized with extension filter: {sorted(self.selected_extensions)}")
 
     def scan_directory(self) -> List[Dict[str, Any]]:
         """Scan directory and catalog all files (code and config only, exclude binaries)"""
         files_info = []
+        skipped_by_filter = 0
 
         for root, dirs, files in os.walk(self.base_path):
             # Skip hidden directories and common ignore patterns
@@ -142,6 +148,11 @@ class CodeAnalyzer:
                 if ext in self.BINARY_EXTENSIONS:
                     continue
 
+                # Apply extension filter if specified
+                if self.selected_extensions and ext not in self.selected_extensions:
+                    skipped_by_filter += 1
+                    continue
+
                 file_info = {
                     'path': str(rel_path),
                     'name': file,
@@ -152,6 +163,9 @@ class CodeAnalyzer:
 
                 files_info.append(file_info)
                 self.files.append(file_path)
+
+        if skipped_by_filter > 0:
+            print(f"[INFO] Skipped {skipped_by_filter} files due to extension filter")
 
         return files_info
 

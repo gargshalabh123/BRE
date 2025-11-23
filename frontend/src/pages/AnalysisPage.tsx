@@ -4,12 +4,10 @@ import { ArrowLeft, Download, Loader } from 'lucide-react'
 import api, { AnalysisResults } from '../services/api'
 import OverviewTab from '../components/OverviewTab'
 import MetricsTab from '../components/MetricsTab'
-import DependenciesTab from '../components/DependenciesTab'
-import DatabaseTab from '../components/DatabaseTab'
-import BusinessRulesTab from '../components/BusinessRulesTab'
-import AIInsightsTab from '../components/AIInsightsTab'
+import AgenticAnalysisTab from '../components/AgenticAnalysisTab'
+import EnhancedDependenciesTab from '../components/EnhancedDependenciesTab'
 
-type TabType = 'overview' | 'metrics' | 'dependencies' | 'database' | 'rules' | 'ai'
+type TabType = 'overview' | 'metrics' | 'ai' | 'enhanced'
 
 const AnalysisPage: React.FC = () => {
   const { uploadId } = useParams<{ uploadId: string }>()
@@ -18,6 +16,10 @@ const AnalysisPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [analysisData, setAnalysisData] = useState<AnalysisResults | null>(null)
+
+  // Track if we're currently loading to prevent duplicate requests
+  const loadingRef = React.useRef(false)
+  const loadedUploadIdRef = React.useRef<string | null>(null)
 
   useEffect(() => {
     // Check authentication first
@@ -33,19 +35,34 @@ const AnalysisPage: React.FC = () => {
       return
     }
 
+    // Skip if already loaded this upload or currently loading
+    if (loadingRef.current || loadedUploadIdRef.current === uploadId) {
+      console.log('[AnalysisPage] Skipping duplicate load for uploadId:', uploadId)
+      return
+    }
+
     const loadAnalysis = async () => {
       try {
+        loadingRef.current = true
         console.log('[AnalysisPage] Loading analysis for uploadId:', uploadId)
         setLoading(true)
-        const data = await api.analyzeFullCodebase(uploadId)
+
+        // Get selected extensions from sessionStorage if available
+        const selectedExtensionsJson = sessionStorage.getItem(`selected_extensions_${uploadId}`)
+        const selectedExtensions = selectedExtensionsJson ? JSON.parse(selectedExtensionsJson) : undefined
+
+        console.log('[AnalysisPage] Selected extensions:', selectedExtensions)
+        const data = await api.analyzeFullCodebase(uploadId, selectedExtensions)
         console.log('[AnalysisPage] Analysis data loaded successfully')
         setAnalysisData(data)
         setError(null)
+        loadedUploadIdRef.current = uploadId
       } catch (err: any) {
         console.error('[AnalysisPage] Analysis failed:', err)
         setError(err.response?.data?.detail || 'Failed to analyze codebase')
       } finally {
         setLoading(false)
+        loadingRef.current = false
       }
     }
 
@@ -98,25 +115,13 @@ const AnalysisPage: React.FC = () => {
             className={`tab ${activeTab === 'metrics' ? 'active' : ''}`}
             onClick={() => setActiveTab('metrics')}
           >
-            Metrics
+            Details
           </button>
           <button
-            className={`tab ${activeTab === 'dependencies' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dependencies')}
+            className={`tab ${activeTab === 'enhanced' ? 'active' : ''}`}
+            onClick={() => setActiveTab('enhanced')}
           >
-            Dependencies
-          </button>
-          <button
-            className={`tab ${activeTab === 'database' ? 'active' : ''}`}
-            onClick={() => setActiveTab('database')}
-          >
-            Database
-          </button>
-          <button
-            className={`tab ${activeTab === 'rules' ? 'active' : ''}`}
-            onClick={() => setActiveTab('rules')}
-          >
-            Business Rules
+            Analysis
           </button>
           <button
             className={`tab ${activeTab === 'ai' ? 'active' : ''}`}
@@ -126,78 +131,29 @@ const AnalysisPage: React.FC = () => {
           </button>
         </div>
 
-        {activeTab === 'overview' && (
-          loading ? (
-            <div style={{ padding: '60px', textAlign: 'center' }}>
-              <Loader className="loading-spinner" size={40} />
-              <p style={{ marginTop: '20px' }}>Analyzing codebase...</p>
+        {loading ? (
+          <div style={{ padding: '60px', textAlign: 'center' }}>
+            <Loader className="loading-spinner" size={40} />
+            <p style={{ marginTop: '20px' }}>Analyzing codebase...</p>
+          </div>
+        ) : error ? (
+          <div className="error">{error}</div>
+        ) : analysisData ? (
+          <>
+            <div style={{ display: activeTab === 'overview' ? 'block' : 'none' }}>
+              <OverviewTab data={analysisData} uploadId={uploadId!} />
             </div>
-          ) : error ? (
-            <div className="error">{error}</div>
-          ) : analysisData ? (
-            <OverviewTab data={analysisData} uploadId={uploadId!} />
-          ) : null
-        )}
-        {activeTab === 'metrics' && (
-          loading ? (
-            <div style={{ padding: '60px', textAlign: 'center' }}>
-              <Loader className="loading-spinner" size={40} />
-              <p style={{ marginTop: '20px' }}>Analyzing codebase...</p>
+            <div style={{ display: activeTab === 'metrics' ? 'block' : 'none' }}>
+              <MetricsTab data={analysisData} />
             </div>
-          ) : error ? (
-            <div className="error">{error}</div>
-          ) : analysisData ? (
-            <MetricsTab data={analysisData} />
-          ) : null
-        )}
-        {activeTab === 'dependencies' && (
-          loading ? (
-            <div style={{ padding: '60px', textAlign: 'center' }}>
-              <Loader className="loading-spinner" size={40} />
-              <p style={{ marginTop: '20px' }}>Analyzing codebase...</p>
+            <div style={{ display: activeTab === 'enhanced' ? 'block' : 'none' }}>
+              <EnhancedDependenciesTab uploadId={uploadId!} />
             </div>
-          ) : error ? (
-            <div className="error">{error}</div>
-          ) : analysisData ? (
-            <DependenciesTab data={analysisData} uploadId={uploadId!} />
-          ) : null
-        )}
-        {activeTab === 'database' && (
-          loading ? (
-            <div style={{ padding: '60px', textAlign: 'center' }}>
-              <Loader className="loading-spinner" size={40} />
-              <p style={{ marginTop: '20px' }}>Analyzing codebase...</p>
+            <div style={{ display: activeTab === 'ai' ? 'block' : 'none' }}>
+              <AgenticAnalysisTab uploadId={uploadId!} data={analysisData} />
             </div>
-          ) : error ? (
-            <div className="error">{error}</div>
-          ) : analysisData ? (
-            <DatabaseTab data={analysisData} />
-          ) : null
-        )}
-        {activeTab === 'rules' && (
-          loading ? (
-            <div style={{ padding: '60px', textAlign: 'center' }}>
-              <Loader className="loading-spinner" size={40} />
-              <p style={{ marginTop: '20px' }}>Analyzing codebase...</p>
-            </div>
-          ) : error ? (
-            <div className="error">{error}</div>
-          ) : analysisData ? (
-            <BusinessRulesTab data={analysisData} />
-          ) : null
-        )}
-        {activeTab === 'ai' && (
-          loading ? (
-            <div style={{ padding: '60px', textAlign: 'center' }}>
-              <Loader className="loading-spinner" size={40} />
-              <p style={{ marginTop: '20px' }}>Analyzing codebase...</p>
-            </div>
-          ) : error ? (
-            <div className="error">{error}</div>
-          ) : analysisData ? (
-            <AIInsightsTab uploadId={uploadId!} data={analysisData} />
-          ) : null
-        )}
+          </>
+        ) : null}
       </div>
     </div>
   )

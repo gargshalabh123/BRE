@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Loader } from 'lucide-react'
 import api, { AnalysisResults, ZipExplorerData } from '../services/api'
 import FileTreeViewer from './FileTreeViewer'
@@ -10,12 +9,11 @@ interface Props {
   uploadId: string
 }
 
-const COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a']
-
 const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
   const { summary, metrics, database_operations, business_rules } = data
   const [zipData, setZipData] = useState<ZipExplorerData | null>(null)
   const [loadingZip, setLoadingZip] = useState(true)
+  const [selectedExtensions, setSelectedExtensions] = useState<string[] | null>(null)
 
   useEffect(() => {
     const loadZipData = async () => {
@@ -31,13 +29,12 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
     loadZipData()
   }, [uploadId])
 
-  // Prepare file types chart data - handle cases where summary might be undefined
-  const fileTypesData = summary?.file_types
-    ? Object.entries(summary.file_types).map(([name, value]) => ({
-        name,
-        value
-      }))
-    : []
+  // Get selected extensions from analysis data
+  useEffect(() => {
+    if (data.selected_extensions) {
+      setSelectedExtensions(data.selected_extensions)
+    }
+  }, [data])
 
   // Navigate to file detail page when file is clicked in tree
   const handleFileClick = (filePath: string) => {
@@ -75,29 +72,6 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
         </div>
       </div>
 
-      <div style={{ marginTop: '30px' }}>
-        <h3 style={{ marginBottom: '15px' }}>File Types Distribution</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={fileTypesData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-              outerRadius={100}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {fileTypesData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-
       {/* ZIP Explorer Data */}
       {loadingZip && (
         <div style={{ marginTop: '30px', textAlign: 'center', padding: '20px' }}>
@@ -122,6 +96,14 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
                 </thead>
                 <tbody>
                   {Object.entries(zipData.statistics.by_extension)
+                    .filter(([ext]) => {
+                      // If selectedExtensions is set, only show those extensions
+                      if (selectedExtensions && selectedExtensions.length > 0) {
+                        return selectedExtensions.includes(ext)
+                      }
+                      // Otherwise show all (fallback for old analyses without selected_extensions)
+                      return true
+                    })
                     .sort(([, a], [, b]) => b.loc - a.loc)
                     .map(([ext, stats]: [string, any]) => (
                       <tr key={ext}>
@@ -150,29 +132,6 @@ const OverviewTab: React.FC<Props> = ({ data, uploadId }) => {
               overflow: 'auto'
             }}>
               <FileTreeViewer tree={zipData.file_tree} onFileClick={handleFileClick} />
-            </div>
-          </div>
-
-          <div className="grid" style={{ marginTop: '30px' }}>
-            <div className="stat-card">
-              <h3>Unique Extensions</h3>
-              <div className="value">{zipData.statistics.unique_extensions}</div>
-            </div>
-            <div className="stat-card">
-              <h3>Unique Directories</h3>
-              <div className="value">{zipData.statistics.unique_directories}</div>
-            </div>
-            <div className="stat-card">
-              <h3>Text Files</h3>
-              <div className="value">{zipData.statistics.text_files}</div>
-            </div>
-            <div className="stat-card">
-              <h3>Binary Files</h3>
-              <div className="value">{zipData.statistics.binary_files}</div>
-            </div>
-            <div className="stat-card">
-              <h3>Compression Ratio</h3>
-              <div className="value">{zipData.statistics.overall_compression_ratio.toFixed(1)}x</div>
             </div>
           </div>
         </>

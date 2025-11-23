@@ -13,6 +13,10 @@ from api.analysis import router as analysis_router
 from api.ai import router as ai_router
 from api.language_analysis import router as language_router
 from api.zip_analysis import router as zip_router
+from api.agentic import router as agentic_router
+from api.dependencies import router as dependencies_router
+
+print(f"[DEBUG] Dependencies router loaded with {len(dependencies_router.routes)} routes")
 
 load_dotenv()
 
@@ -22,17 +26,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS Configuration
+# CORS Configuration - Allow all origins for development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:5173"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Configuration
@@ -41,10 +42,30 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "100"))
 
 # Include routers
-app.include_router(analysis_router, prefix="/api/analysis", tags=["Analysis"])
-app.include_router(ai_router, prefix="/api/ai", tags=["AI"])
-app.include_router(language_router, prefix="/api/languages", tags=["Language-Specific Analysis"])
-app.include_router(zip_router, prefix="/api/zip", tags=["ZIP Analysis"])
+try:
+    print(f"[DEBUG] Registering analysis_router...")
+    app.include_router(analysis_router, prefix="/api/analysis", tags=["Analysis"])
+    print(f"[DEBUG] Registering ai_router...")
+    app.include_router(ai_router, prefix="/api/ai", tags=["AI"])
+    print(f"[DEBUG] Registering language_router...")
+    app.include_router(language_router, prefix="/api/languages", tags=["Language-Specific Analysis"])
+    print(f"[DEBUG] Registering zip_router...")
+    app.include_router(zip_router, prefix="/api/zip", tags=["ZIP Analysis"])
+    print(f"[DEBUG] Registering agentic_router...")
+    app.include_router(agentic_router, prefix="/api", tags=["Agentic AI"])
+    print(f"[DEBUG] Registering dependencies_router with {len(dependencies_router.routes)} routes...")
+    app.include_router(dependencies_router, prefix="/api", tags=["Dependencies"])
+    print(f"[DEBUG] All routers registered. Total app routes: {len(app.routes)}")
+except Exception as e:
+    print(f"[ERROR] Failed to register routers: {e}")
+    import traceback
+    traceback.print_exc()
+
+# Log all registered routes
+with open('routes_debug.log', 'w') as f:
+    for route in app.routes:
+        if hasattr(route, 'path'):
+            f.write(f"{route.path}\n")
 
 
 @app.get("/")

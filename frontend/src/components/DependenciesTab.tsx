@@ -4,6 +4,7 @@ import { Download } from 'lucide-react'
 import { AnalysisResults } from '../services/api'
 import { getDependencyTypeStyle, getDependencyTypeLabel } from '../utils/dependencyColors'
 import { exportToCSV } from '../utils/csvExport'
+import AIAnalysisButton from './ai/AIAnalysisButton'
 
 interface Props {
   data: AnalysisResults
@@ -262,6 +263,7 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
                 <th>Signature</th>
                 <th>Parameters</th>
                 <th>Description</th>
+                <th style={{ textAlign: 'center' }}>AI Analysis</th>
               </tr>
             </thead>
             <tbody>
@@ -344,6 +346,14 @@ const DependenciesTab: React.FC<Props> = ({ data, uploadId }) => {
                     )}
                   </td>
                   <td style={{ fontSize: '0.85em', color: '#666' }}>{dep.description}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <AIAnalysisButton
+                      uploadId={uploadId}
+                      itemType="dependency"
+                      itemData={dep}
+                      variant="button"
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

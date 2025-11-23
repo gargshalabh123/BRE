@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { Loader, Sparkles } from 'lucide-react'
+import { Loader, Sparkles, CheckCircle, XCircle } from 'lucide-react'
 import api, { AnalysisResults } from '../services/api'
+import { useAIProvider } from '../contexts/AIProviderContext'
 
 interface Props {
   uploadId: string
@@ -12,14 +13,30 @@ const AIInsightsTab: React.FC<Props> = ({ uploadId, data }) => {
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [provider, setProvider] = useState<'openai' | 'anthropic'>('anthropic')
+  const { selectedProvider, setSelectedProvider, availableProviders, setAvailableProviders } = useAIProvider()
+  const [loadingProviders, setLoadingProviders] = useState(true)
+
+  // Fetch available providers on mount
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const data = await api.getAvailableProviders()
+        setAvailableProviders(data)
+      } catch (err) {
+        console.error('Failed to fetch AI providers:', err)
+      } finally {
+        setLoadingProviders(false)
+      }
+    }
+    fetchProviders()
+  }, [])
 
   const generateSummary = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const response = await api.summarizeCodebase(uploadId, provider)
+      const response = await api.summarizeCodebase(uploadId, selectedProvider)
       setSummary(response.summary)
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to generate AI summary')
@@ -44,16 +61,28 @@ const AIInsightsTab: React.FC<Props> = ({ uploadId, data }) => {
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as 'openai' | 'anthropic')}
+            value={selectedProvider}
+            onChange={(e) => setSelectedProvider(e.target.value)}
+            disabled={loadingProviders}
             style={{
               padding: '10px',
               borderRadius: '4px',
-              border: '1px solid #ddd'
+              border: '1px solid #ddd',
+              minWidth: '200px'
             }}
           >
-            <option value="anthropic">Anthropic Claude</option>
-            <option value="openai">OpenAI GPT-4</option>
+            <option value="gemini">
+              {availableProviders?.providers?.gemini?.available ? '✓ ' : '✗ '}
+              Google Gemini
+            </option>
+            <option value="anthropic">
+              {availableProviders?.providers?.anthropic?.available ? '✓ ' : '✗ '}
+              Anthropic Claude
+            </option>
+            <option value="openai">
+              {availableProviders?.providers?.openai?.available ? '✓ ' : '✗ '}
+              OpenAI GPT-4
+            </option>
           </select>
 
           <button

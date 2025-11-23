@@ -112,6 +112,7 @@ CREATE TABLE analysis_runs (
     total_comments INTEGER DEFAULT 0,
     total_blank INTEGER DEFAULT 0,
     avg_complexity REAL DEFAULT 0.0,
+    selected_extensions TEXT,  -- JSON array of selected file extensions [".cbl", ".sql"]
     error_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP,

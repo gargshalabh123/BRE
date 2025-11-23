@@ -30,8 +30,7 @@ class DatabaseManager:
         if is_new_db:
             print(f"[INFO] Creating new database at {self.db_path}")
             self._execute_schema()
-        else:
-            print(f"[INFO] Connected to existing database at {self.db_path}")
+        # Removed noisy "Connected to existing database" logging for performance
 
     def _execute_schema(self):
         """Execute schema SQL file to create tables"""
@@ -168,13 +167,21 @@ class DatabaseManager:
     # ============================================
 
     def create_analysis_run(self, project_id: int, upload_id: str,
-                          upload_filename: str = None, uploaded_by: int = None) -> int:
-        """Create a new analysis run"""
+                          upload_filename: str = None, uploaded_by: int = None,
+                          selected_extensions: List[str] = None) -> int:
+        """Create a new analysis run with optional file extension filtering"""
         cursor = self.connection.cursor()
+
+        # Convert selected_extensions list to JSON string
+        extensions_json = None
+        if selected_extensions:
+            import json
+            extensions_json = json.dumps(selected_extensions)
+
         cursor.execute("""
-            INSERT INTO analysis_runs (project_id, upload_id, upload_filename, uploaded_by)
-            VALUES (?, ?, ?, ?)
-        """, (project_id, upload_id, upload_filename, uploaded_by))
+            INSERT INTO analysis_runs (project_id, upload_id, upload_filename, uploaded_by, selected_extensions)
+            VALUES (?, ?, ?, ?, ?)
+        """, (project_id, upload_id, upload_filename, uploaded_by, extensions_json))
         self.connection.commit()
         return cursor.lastrowid
 
@@ -461,6 +468,72 @@ class DatabaseManager:
             'database_operations': db_operations,
             'business_rules': business_rules
         }
+
+    # ============================================
+    # DELETE OPERATIONS
+    # ============================================
+
+    def delete_analysis_run(self, analysis_run_id: int) -> bool:
+        """
+        Delete an analysis run and all related data (cascading delete)
+        Returns True if successful, False if not found
+        """
+        try:
+            cursor = self.connection.cursor()
+            # Check if exists
+            cursor.execute("SELECT id FROM analysis_runs WHERE id = ?", (analysis_run_id,))
+            if not cursor.fetchone():
+                return False
+
+            # Delete (cascade will handle related tables)
+            cursor.execute("DELETE FROM analysis_runs WHERE id = ?", (analysis_run_id,))
+            self.connection.commit()
+            print(f"[INFO] Deleted analysis run {analysis_run_id} and all related data")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to delete analysis run {analysis_run_id}: {e}")
+            self.connection.rollback()
+            raise
+
+    def delete_analysis_run_by_upload_id(self, upload_id: str) -> bool:
+        """
+        Delete an analysis run by upload_id and all related data
+        Returns True if successful, False if not found
+        """
+        try:
+            cursor = self.connection.cursor()
+            # Get analysis run id
+            cursor.execute("SELECT id FROM analysis_runs WHERE upload_id = ?", (upload_id,))
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            analysis_run_id = row['id']
+            return self.delete_analysis_run(analysis_run_id)
+        except Exception as e:
+            print(f"[ERROR] Failed to delete analysis run with upload_id {upload_id}: {e}")
+            raise
+
+    def delete_all_analysis_runs(self) -> int:
+        """
+        Delete all analysis runs and related data
+        Returns the number of analysis runs deleted
+        """
+        try:
+            cursor = self.connection.cursor()
+            # Count before deleting
+            cursor.execute("SELECT COUNT(*) as count FROM analysis_runs")
+            count = cursor.fetchone()['count']
+
+            # Delete all
+            cursor.execute("DELETE FROM analysis_runs")
+            self.connection.commit()
+            print(f"[INFO] Deleted all {count} analysis runs and related data")
+            return count
+        except Exception as e:
+            print(f"[ERROR] Failed to delete all analysis runs: {e}")
+            self.connection.rollback()
+            raise
 
     def execute_query(self, query: str, params: tuple = ()) -> List[Dict]:
         """Execute a custom query and return results"""
